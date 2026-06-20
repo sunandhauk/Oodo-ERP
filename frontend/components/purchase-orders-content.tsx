@@ -5,23 +5,21 @@ import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useAuditLog } from "@/components/audit-log-provider";
 import { ChevronDownIcon, SearchIcon } from "@/components/icons";
-import { useSalesOrders } from "@/components/sales-orders-store";
-import type { SalesOrderDraft, SalesOrderLine, SalesOrderRecord, SalesOrderStatus } from "@/lib/sales-orders";
-import { calculateSalesOrderTotal, getNextSalesOrderReference } from "@/lib/sales-orders";
+import { usePurchaseOrders } from "@/components/purchase-orders-store";
+import type { PurchaseOrderDraft, PurchaseOrderLine, PurchaseOrderRecord, PurchaseOrderStatus } from "@/lib/purchase-orders";
+import { calculatePurchaseOrderTotal, getNextPurchaseOrderReference } from "@/lib/purchase-orders";
 
-function Badge({ status }: { status: SalesOrderStatus }) {
+function Badge({ status }: { status: PurchaseOrderStatus }) {
   const className =
     status === "Confirmed"
       ? "bg-emerald-50 text-emerald-700"
-      : status === "Partially Delivered"
+      : status === "Received"
         ? "bg-blue-50 text-blue-700"
         : status === "Pending"
           ? "bg-amber-50 text-amber-700"
-          : status === "Delivered"
-            ? "bg-emerald-50 text-emerald-700"
-            : status === "Cancelled"
-              ? "bg-red-50 text-red-700"
-              : "bg-slate-100 text-slate-700";
+          : status === "Cancelled"
+            ? "bg-red-50 text-red-700"
+            : "bg-slate-100 text-slate-700";
 
   return (
     <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm font-medium ${className}`}>
@@ -48,7 +46,7 @@ function SectionCard({
   );
 }
 
-function formatDisplayTimestamp(order: SalesOrderRecord) {
+function formatDisplayTimestamp(order: PurchaseOrderRecord) {
   return (
     <div>
       <div className="text-[0.94rem] font-semibold text-slate-900">{order.date}</div>
@@ -57,14 +55,13 @@ function formatDisplayTimestamp(order: SalesOrderRecord) {
   );
 }
 
-function makeDefaultLine(): SalesOrderLine {
+function makeDefaultLine(): PurchaseOrderLine {
   return {
     product: "",
-    availability: "In Stock",
     orderedQuantity: 1,
-    deliveredQuantity: 0,
+    receivedQuantity: 0,
     units: "Nos",
-    unitPrice: 0,
+    unitCost: 0,
   };
 }
 
@@ -104,10 +101,10 @@ function GridToolbarIcon() {
   );
 }
 
-export function SalesOrdersContent() {
+export function PurchaseOrdersContent() {
   const router = useRouter();
   const { appendAuditLog } = useAuditLog();
-  const { orders } = useSalesOrders();
+  const { orders } = usePurchaseOrders();
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
@@ -126,14 +123,14 @@ export function SalesOrdersContent() {
   useEffect(() => {
     appendAuditLog({
       user: "Admin",
-      module: "Sales Orders",
+      module: "Purchase Orders",
       recordType: "Page",
-      recordId: "/sales-orders",
+      recordId: "/purchase-orders",
       action: "Viewed",
       fieldChanged: "Route",
       oldValue: "-",
-      newValue: "/sales-orders",
-      details: "Sales orders list opened",
+      newValue: "/purchase-orders",
+      details: "Purchase orders list opened",
     });
   }, [appendAuditLog]);
 
@@ -145,14 +142,14 @@ export function SalesOrdersContent() {
     setViewMode("table");
     appendAuditLog({
       user: "Admin",
-      module: "Sales Orders",
+      module: "Purchase Orders",
       recordType: "View",
       recordId: "table",
       action: "Viewed",
       fieldChanged: "Layout",
       oldValue: "cards",
       newValue: "table",
-      details: "Sales orders switched to normal table view",
+      details: "Purchase orders switched to normal table view",
     });
   }
 
@@ -160,14 +157,14 @@ export function SalesOrdersContent() {
     setViewMode("cards");
     appendAuditLog({
       user: "Admin",
-      module: "Sales Orders",
+      module: "Purchase Orders",
       recordType: "View",
       recordId: "cards",
       action: "Viewed",
       fieldChanged: "Layout",
       oldValue: "table",
       newValue: "cards",
-      details: "Sales orders switched to card view",
+      details: "Purchase orders switched to card view",
     });
   }
 
@@ -175,7 +172,7 @@ export function SalesOrdersContent() {
     const q = query.trim().toLowerCase();
 
     return orders.filter((order) => {
-      const haystack = [order.reference, order.customer, order.salesperson, order.status, order.date, order.time].join(" ").toLowerCase();
+      const haystack = [order.reference, order.vendor, order.responsible, order.status, order.date, order.time].join(" ").toLowerCase();
 
       if (q && !haystack.includes(q)) {
         return false;
@@ -198,14 +195,34 @@ export function SalesOrdersContent() {
   const startPage = Math.max(1, Math.min(currentPage - 2, Math.max(1, pageCount - 4)));
   const visiblePages = Array.from({ length: Math.min(5, pageCount) }, (_, index) => startPage + index);
 
-  const summary = useMemo(() => {
-    const confirmed = orders.filter((order) => order.status === "Confirmed").length;
-    const pending = orders.filter((order) => order.status === "Pending").length;
-    const delivered = orders.filter((order) => order.status === "Delivered").length;
-    const cancelled = orders.filter((order) => order.status === "Cancelled").length;
+  function handleExport() {
+    const csvRows = [
+      ["Reference", "Date", "Vendor", "Responsible", "Status", "Total Amount"].join(","),
+      ...filteredOrders.map((order) =>
+        [order.reference, order.date, order.vendor, order.responsible, order.status, order.grandTotal].map((value) => `"${String(value).replaceAll('"', '""')}"`).join(","),
+      ),
+    ];
 
-    return { total: orders.length, confirmed, pending, delivered, cancelled };
-  }, [orders]);
+    const blob = new Blob([csvRows.join("\n")], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "purchase-orders.csv";
+    link.click();
+    URL.revokeObjectURL(url);
+
+    appendAuditLog({
+      user: "Admin",
+      module: "Purchase Orders",
+      recordType: "Export",
+      recordId: "csv",
+      action: "Exported",
+      fieldChanged: "Rows",
+      oldValue: "-",
+      newValue: String(filteredOrders.length),
+      details: "Exported purchase orders list",
+    });
+  }
 
   return (
     <div className="space-y-4">
@@ -214,58 +231,23 @@ export function SalesOrdersContent() {
           <div className="flex items-center gap-2 text-sm font-semibold text-slate-500">
             <span>Home</span>
             <span className="text-slate-300">/</span>
-            <span className="text-blue-600">Sales Orders</span>
+            <span className="text-blue-600">Purchase Orders</span>
           </div>
-          <h1 className="mt-2 text-[1.65rem] font-extrabold tracking-[-0.04em] text-slate-900 sm:text-[1.9rem]">Sales Order List</h1>
-          <p className="mt-1 text-[0.9rem] text-slate-500 sm:text-[0.95rem]">
-            Browse, filter, and manage customer sales orders.
-          </p>
+          <h1 className="mt-2 text-[1.65rem] font-extrabold tracking-[-0.04em] text-slate-900 sm:text-[1.9rem]">Purchase Order List</h1>
+          <p className="mt-1 text-[0.9rem] text-slate-500 sm:text-[0.95rem]">Browse, filter, and manage purchase orders.</p>
         </div>
 
         <button
           type="button"
-          onClick={() => router.push("/sales-orders/new")}
+          onClick={() => router.push("/purchase-orders/new")}
           className="inline-flex items-center gap-2 rounded-2xl bg-brand-600 px-4 py-3 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(31,158,122,0.2)] transition hover:bg-brand-700"
         >
           <span className="text-lg leading-none">+</span>
-          New Sales Order
+          New Purchase Order
         </button>
       </section>
 
-      {viewMode === "table" ? (
-        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <SectionCard>
-            <div className="p-4">
-              <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Total Orders</div>
-              <div className="mt-2 text-3xl font-extrabold tracking-[-0.04em] text-slate-900">{summary.total}</div>
-              <div className="mt-1 text-sm text-slate-500">All sales order records</div>
-            </div>
-          </SectionCard>
-          <SectionCard>
-            <div className="p-4">
-              <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Confirmed</div>
-              <div className="mt-2 text-3xl font-extrabold tracking-[-0.04em] text-emerald-600">{summary.confirmed}</div>
-              <div className="mt-1 text-sm text-slate-500">Confirmed orders</div>
-            </div>
-          </SectionCard>
-          <SectionCard>
-            <div className="p-4">
-              <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Pending</div>
-              <div className="mt-2 text-3xl font-extrabold tracking-[-0.04em] text-amber-600">{summary.pending}</div>
-              <div className="mt-1 text-sm text-slate-500">Awaiting fulfillment</div>
-            </div>
-          </SectionCard>
-          <SectionCard>
-            <div className="p-4">
-              <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Delivered</div>
-              <div className="mt-2 text-3xl font-extrabold tracking-[-0.04em] text-blue-600">{summary.delivered}</div>
-              <div className="mt-1 text-sm text-slate-500">Completed deliveries</div>
-            </div>
-          </SectionCard>
-        </section>
-      ) : null}
-
-      <SectionCard className={viewMode === "cards" ? "overflow-hidden" : ""}>
+      <SectionCard>
         <div className="border-b border-slate-100 p-4">
           <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
             <div className="flex flex-wrap items-center gap-2">
@@ -320,6 +302,13 @@ export function SalesOrdersContent() {
               >
                 <GridToolbarIcon />
               </button>
+              <button
+                type="button"
+                onClick={handleExport}
+                className="inline-flex h-11 items-center justify-center rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                Export
+              </button>
             </div>
 
             <div className="flex items-center gap-2">
@@ -349,7 +338,7 @@ export function SalesOrdersContent() {
                       ref={searchInputRef}
                       value={query}
                       onChange={(event) => setQuery(event.target.value)}
-                      placeholder="Search by reference, customer, salesperson..."
+                      placeholder="Search by reference, vendor, responsible..."
                       className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-12 pr-4 text-sm font-medium text-slate-800 outline-none transition focus:border-slate-300 focus:bg-white"
                     />
                   </div>
@@ -366,7 +355,7 @@ export function SalesOrdersContent() {
                         onChange={(event) => setStatus(event.target.value)}
                         className="h-12 w-full appearance-none rounded-2xl border border-slate-200 bg-slate-50 px-4 pr-10 text-sm font-medium text-slate-800 outline-none transition focus:border-slate-300 focus:bg-white"
                       >
-                        {["All Status", "Confirmed", "Partially Delivered", "Pending", "Delivered", "Cancelled"].map((value) => (
+                        {["All Status", "Confirmed", "Draft", "Pending", "Received", "Cancelled"].map((value) => (
                           <option key={value}>{value}</option>
                         ))}
                       </select>
@@ -396,42 +385,47 @@ export function SalesOrdersContent() {
         <div className="overflow-x-auto">
           {viewMode === "table" ? (
             <table className="min-w-[1120px] w-full border-separate border-spacing-0">
-            <thead className="bg-slate-50/80">
-              <tr className="text-left text-[0.78rem] font-bold uppercase tracking-[0.14em] text-slate-500">
-                {["", "Reference", "Date", "Customer", "Salesperson", "Status", ""].map((column, index) => (
-                  <th key={`${column}-${index}`} className="border-b border-slate-200 px-4 py-3.5">
-                    {column}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {pageOrders.map((order, index) => (
-                <tr key={order.id} className={index % 2 === 0 ? "bg-white" : "bg-slate-50/40"}>
-                  <td className="border-b border-slate-100 px-4 py-4">
-                    <input type="checkbox" className="h-4 w-4 rounded border-slate-300 text-blue-600" />
-                  </td>
-                  <td className="border-b border-slate-100 px-4 py-4 text-sm font-semibold text-slate-900">{order.reference}</td>
-                  <td className="border-b border-slate-100 px-4 py-4">{formatDisplayTimestamp(order)}</td>
-                  <td className="border-b border-slate-100 px-4 py-4 text-sm text-slate-700">{order.customer}</td>
-                  <td className="border-b border-slate-100 px-4 py-4 text-sm text-slate-700">{order.salesperson}</td>
-                  <td className="border-b border-slate-100 px-4 py-4"><Badge status={order.status} /></td>
-                  <td className="border-b border-slate-100 px-4 py-4 text-right">
-                    <button
-                      type="button"
-                      className="inline-flex h-9 w-9 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
-                      aria-label="Row actions"
-                    >
-                      <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor" aria-hidden="true">
-                        <circle cx="12" cy="5" r="1.6" />
-                        <circle cx="12" cy="12" r="1.6" />
-                        <circle cx="12" cy="19" r="1.6" />
-                      </svg>
-                    </button>
-                  </td>
+              <thead className="bg-slate-50/80">
+                <tr className="text-left text-[0.78rem] font-bold uppercase tracking-[0.14em] text-slate-500">
+                  {["", "Reference", "Date", "Vendor", "Responsible", "Status", "Total Amount", ""].map((column, index) => (
+                    <th key={`${column}-${index}`} className="border-b border-slate-200 px-4 py-3.5">
+                      {column}
+                    </th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
+              </thead>
+              <tbody>
+                {pageOrders.map((order, index) => (
+                  <tr key={order.id} className={index % 2 === 0 ? "bg-white" : "bg-slate-50/40"}>
+                    <td className="border-b border-slate-100 px-4 py-4">
+                      <input type="checkbox" className="h-4 w-4 rounded border-slate-300 text-blue-600" />
+                    </td>
+                    <td className="border-b border-slate-100 px-4 py-4 text-sm font-semibold text-slate-900">{order.reference}</td>
+                    <td className="border-b border-slate-100 px-4 py-4">{formatDisplayTimestamp(order)}</td>
+                    <td className="border-b border-slate-100 px-4 py-4 text-sm text-slate-700">{order.vendor}</td>
+                    <td className="border-b border-slate-100 px-4 py-4 text-sm text-slate-700">{order.responsible}</td>
+                    <td className="border-b border-slate-100 px-4 py-4">
+                      <Badge status={order.status} />
+                    </td>
+                    <td className="border-b border-slate-100 px-4 py-4 text-sm font-semibold text-slate-900">
+                      Rs. {order.grandTotal.toLocaleString("en-IN")}
+                    </td>
+                    <td className="border-b border-slate-100 px-4 py-4 text-right">
+                      <button
+                        type="button"
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+                        aria-label="Row actions"
+                      >
+                        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor" aria-hidden="true">
+                          <circle cx="12" cy="5" r="1.6" />
+                          <circle cx="12" cy="12" r="1.6" />
+                          <circle cx="12" cy="19" r="1.6" />
+                        </svg>
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
             </table>
           ) : (
             <div className="min-w-[840px] p-4">
@@ -444,8 +438,8 @@ export function SalesOrdersContent() {
                       setViewMode("table");
                       appendAuditLog({
                         user: "Admin",
-                        module: "Sales Orders",
-                        recordType: "Sales Order",
+                        module: "Purchase Orders",
+                        recordType: "Purchase Order",
                         recordId: order.reference,
                         action: "Viewed",
                         fieldChanged: "Card",
@@ -459,14 +453,14 @@ export function SalesOrdersContent() {
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <div className="text-[1.05rem] font-extrabold tracking-[-0.04em] text-blue-700">{order.reference}</div>
-                        <div className="mt-4 text-[1rem] font-semibold text-slate-900">{order.customer}</div>
+                        <div className="mt-4 text-[1rem] font-semibold text-slate-900">{order.vendor}</div>
                         <div className="mt-2 text-[0.9rem] text-slate-500">{order.date}</div>
                       </div>
                       <Badge status={order.status} />
                     </div>
                     <div className="mt-5 flex items-center justify-between text-sm text-slate-500">
-                      <span>{order.salesperson}</span>
-                      <span>{order.time}</span>
+                      <span>{order.responsible}</span>
+                      <span>Rs. {order.grandTotal.toLocaleString("en-IN")}</span>
                     </div>
                   </button>
                 ))}
@@ -498,9 +492,7 @@ export function SalesOrdersContent() {
                     onClick={() => setPage(pageNumber)}
                     className={[
                       "min-w-9 rounded-full px-3 py-2 text-sm font-semibold transition",
-                      pageNumber === currentPage
-                        ? "bg-slate-900 text-white"
-                        : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
+                      pageNumber === currentPage ? "bg-slate-900 text-white" : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
                     ].join(" ")}
                   >
                     {pageNumber}
@@ -523,14 +515,14 @@ export function SalesOrdersContent() {
   );
 }
 
-export function SalesOrderCreateContent() {
+export function PurchaseOrderCreateContent() {
   const router = useRouter();
   const { appendAuditLog } = useAuditLog();
-  const { orders, createOrder } = useSalesOrders();
-  const nextReference = useMemo(() => getNextSalesOrderReference(orders), [orders]);
-  const [draft, setDraft] = useState<SalesOrderDraft>({
-    customer: "",
-    salesperson: "",
+  const { orders, createOrder } = usePurchaseOrders();
+  const nextReference = useMemo(() => getNextPurchaseOrderReference(orders), [orders]);
+  const [draft, setDraft] = useState<PurchaseOrderDraft>({
+    vendor: "",
+    responsible: "",
     address: "",
     date: new Date().toISOString().slice(0, 10),
     lines: [makeDefaultLine()],
@@ -538,7 +530,7 @@ export function SalesOrderCreateContent() {
   });
   const [saving, setSaving] = useState(false);
 
-  function updateLine(index: number, patch: Partial<SalesOrderLine>) {
+  function updateLine(index: number, patch: Partial<PurchaseOrderLine>) {
     setDraft((current) => ({
       ...current,
       lines: current.lines.map((line, lineIndex) => (lineIndex === index ? { ...line, ...patch } : line)),
@@ -556,51 +548,57 @@ export function SalesOrderCreateContent() {
     }));
   }
 
-  function submit(status: SalesOrderStatus) {
+  function submit(status: PurchaseOrderStatus) {
     setSaving(true);
 
     try {
       const nextOrder = createOrder({ ...draft, status });
       appendAuditLog({
         user: "Admin",
-        module: "Sales Orders",
-        recordType: "Sales Order",
+        module: "Purchase Orders",
+        recordType: "Purchase Order",
         recordId: nextOrder.reference,
         action: "Created",
         fieldChanged: "Order",
         oldValue: "Draft",
         newValue: status,
-        details: `Created sales order ${nextOrder.reference}`,
+        details: `Created purchase order ${nextOrder.reference}`,
       });
-      router.replace("/sales-orders");
+      router.replace("/purchase-orders");
     } finally {
       setSaving(false);
     }
   }
 
-  const grandTotal = calculateSalesOrderTotal(draft.lines);
+  const grandTotal = calculatePurchaseOrderTotal(draft.lines);
 
   return (
     <div className="space-y-4">
       <section className="flex flex-wrap items-start justify-between gap-4 animate-fade-up">
         <div>
           <div className="flex items-center gap-2 text-sm font-semibold text-slate-500">
-            <span>Sales</span>
-            <span className="text-slate-300">/</span>
-            <span>Sales Order</span>
+            <span>Purchase Orders</span>
             <span className="text-slate-300">/</span>
             <span className="text-blue-600">Create</span>
           </div>
-          <h1 className="mt-2 text-[1.65rem] font-extrabold tracking-[-0.04em] text-slate-900 sm:text-[1.9rem]">Create Sales Order</h1>
+          <h1 className="mt-2 text-[1.65rem] font-extrabold tracking-[-0.04em] text-slate-900 sm:text-[1.9rem]">Purchase Order - Create</h1>
         </div>
 
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => router.push("/sales-orders")}
+            onClick={() => router.push("/purchase-orders")}
             className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
           >
-            Back
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={saving}
+            onClick={() => submit("Draft")}
+            className="rounded-xl border border-blue-200 bg-white px-4 py-2.5 text-sm font-semibold text-blue-700 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-70"
+          >
+            {saving ? "Saving..." : "Save as Draft"}
           </button>
           <button
             type="button"
@@ -608,22 +606,7 @@ export function SalesOrderCreateContent() {
             onClick={() => submit("Confirmed")}
             className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-70"
           >
-            {saving ? "Saving..." : "Confirm"}
-          </button>
-          <button
-            type="button"
-            disabled={saving}
-            onClick={() => submit("Delivered")}
-            className="rounded-xl bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-70"
-          >
-            Deliver
-          </button>
-          <button
-            type="button"
-            onClick={() => router.push("/sales-orders")}
-            className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-          >
-            Cancel
+            Save & Confirm
           </button>
         </div>
       </section>
@@ -631,13 +614,13 @@ export function SalesOrderCreateContent() {
       <section className="grid gap-4 xl:grid-cols-[1fr_240px]">
         <SectionCard className="overflow-hidden">
           <div className="flex items-center justify-between border-b border-slate-100 px-4 py-4">
-            <div className="text-[0.98rem] font-extrabold tracking-[-0.03em] text-slate-900">Sales Order Details</div>
+            <div className="text-[0.98rem] font-extrabold tracking-[-0.03em] text-slate-900">Purchase Order Details</div>
             <div className="rounded-full bg-blue-50 px-3 py-1 text-sm font-semibold text-blue-700">Status: Draft</div>
           </div>
 
           <div className="grid gap-4 p-4 md:grid-cols-2">
             <div className="space-y-2">
-              <label className="block text-sm font-semibold text-slate-600">Sales Order No.</label>
+              <label className="block text-sm font-semibold text-slate-600">PO Number</label>
               <input value={nextReference} readOnly className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 outline-none" />
             </div>
             <div className="space-y-2">
@@ -650,30 +633,31 @@ export function SalesOrderCreateContent() {
               />
             </div>
             <div className="space-y-2">
-              <label className="block text-sm font-semibold text-slate-600">Customer</label>
+              <label className="block text-sm font-semibold text-slate-600">Vendor</label>
               <input
-                value={draft.customer}
-                onChange={(event) => setDraft((current) => ({ ...current, customer: event.target.value }))}
-                placeholder="Select customer"
+                value={draft.vendor}
+                onChange={(event) => setDraft((current) => ({ ...current, vendor: event.target.value }))}
+                placeholder="Select vendor"
                 className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 outline-none"
               />
             </div>
             <div className="space-y-2">
-              <label className="block text-sm font-semibold text-slate-600">Sales Person</label>
+              <label className="block text-sm font-semibold text-slate-600">Responsible Person</label>
               <input
-                value={draft.salesperson}
-                onChange={(event) => setDraft((current) => ({ ...current, salesperson: event.target.value }))}
-                placeholder="Select sales person"
+                value={draft.responsible}
+                onChange={(event) => setDraft((current) => ({ ...current, responsible: event.target.value }))}
+                placeholder="Select responsible person"
                 className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 outline-none"
               />
             </div>
             <div className="space-y-2 md:col-span-2">
-              <label className="block text-sm font-semibold text-slate-600">Customer Address</label>
-              <input
+              <label className="block text-sm font-semibold text-slate-600">Vendor Address</label>
+              <textarea
                 value={draft.address}
                 onChange={(event) => setDraft((current) => ({ ...current, address: event.target.value }))}
-                placeholder="Enter customer address"
-                className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 outline-none"
+                placeholder="Enter vendor address"
+                rows={3}
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900 outline-none"
               />
             </div>
           </div>
@@ -689,7 +673,7 @@ export function SalesOrderCreateContent() {
               </div>
               <div className="flex items-center justify-between">
                 <span>Total</span>
-                <span className="font-semibold text-slate-900">₹ {grandTotal.toLocaleString("en-IN")}</span>
+                <span className="font-semibold text-slate-900">Rs. {grandTotal.toLocaleString("en-IN")}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span>New Ref</span>
@@ -705,14 +689,16 @@ export function SalesOrderCreateContent() {
           <table className="min-w-[1080px] w-full border-separate border-spacing-0">
             <thead className="bg-slate-50/80">
               <tr className="text-left text-[0.78rem] font-bold uppercase tracking-[0.14em] text-slate-500">
-                {["#", "Products", "Availability", "Ordered Quantity", "Delivered Quantity", "Units", "Sales Unit Price", "Total", ""].map((column) => (
-                  <th key={column} className="border-b border-slate-200 px-4 py-3.5">{column}</th>
+                {["#", "Products", "Ordered Quantity", "Received Quantity", "Units", "Cost Unit Price", "Total", ""].map((column) => (
+                  <th key={column} className="border-b border-slate-200 px-4 py-3.5">
+                    {column}
+                  </th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {draft.lines.map((line, index) => {
-                const lineTotal = line.orderedQuantity * line.unitPrice;
+                const lineTotal = line.orderedQuantity * line.unitCost;
                 return (
                   <tr key={index} className={index % 2 === 0 ? "bg-white" : "bg-slate-50/40"}>
                     <td className="border-b border-slate-100 px-4 py-4 text-sm font-semibold text-slate-700">{index + 1}</td>
@@ -721,13 +707,6 @@ export function SalesOrderCreateContent() {
                         value={line.product}
                         onChange={(event) => updateLine(index, { product: event.target.value })}
                         placeholder="Product name"
-                        className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 outline-none"
-                      />
-                    </td>
-                    <td className="border-b border-slate-100 px-4 py-4">
-                      <input
-                        value={line.availability}
-                        onChange={(event) => updateLine(index, { availability: event.target.value })}
                         className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 outline-none"
                       />
                     </td>
@@ -744,8 +723,8 @@ export function SalesOrderCreateContent() {
                       <input
                         type="number"
                         min="0"
-                        value={line.deliveredQuantity}
-                        onChange={(event) => updateLine(index, { deliveredQuantity: Number(event.target.value) })}
+                        value={line.receivedQuantity}
+                        onChange={(event) => updateLine(index, { receivedQuantity: Number(event.target.value) })}
                         className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 outline-none"
                       />
                     </td>
@@ -760,17 +739,18 @@ export function SalesOrderCreateContent() {
                       <input
                         type="number"
                         min="0"
-                        value={line.unitPrice}
-                        onChange={(event) => updateLine(index, { unitPrice: Number(event.target.value) })}
+                        value={line.unitCost}
+                        onChange={(event) => updateLine(index, { unitCost: Number(event.target.value) })}
                         className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 outline-none"
                       />
                     </td>
-                    <td className="border-b border-slate-100 px-4 py-4 text-sm font-semibold text-slate-900">₹ {lineTotal.toLocaleString("en-IN")}</td>
+                    <td className="border-b border-slate-100 px-4 py-4 text-sm font-semibold text-slate-900">Rs. {lineTotal.toLocaleString("en-IN")}</td>
                     <td className="border-b border-slate-100 px-4 py-4 text-right">
                       <button
                         type="button"
                         onClick={() => removeLine(index)}
-                        className="rounded-full px-3 py-2 text-sm font-semibold text-rose-600 transition hover:bg-rose-50"
+                        disabled={draft.lines.length === 1}
+                        className="rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         Remove
                       </button>
@@ -782,17 +762,16 @@ export function SalesOrderCreateContent() {
           </table>
         </div>
 
-        <div className="flex flex-col gap-3 border-t border-slate-200 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-4 py-4">
           <button
             type="button"
             onClick={addLine}
-            className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-700 transition hover:bg-blue-100"
+            className="rounded-xl border border-blue-200 bg-white px-4 py-2.5 text-sm font-semibold text-blue-700 transition hover:bg-blue-50"
           >
             + Add a product
           </button>
-          <div className="flex items-center gap-4">
-            <span className="text-sm font-semibold text-slate-500">Grand Total:</span>
-            <span className="text-2xl font-extrabold tracking-[-0.05em] text-slate-900">₹ {grandTotal.toLocaleString("en-IN")}</span>
+          <div className="text-sm font-semibold text-slate-700">
+            Total: <span className="ml-2 text-slate-900">Rs. {grandTotal.toLocaleString("en-IN")}</span>
           </div>
         </div>
       </SectionCard>

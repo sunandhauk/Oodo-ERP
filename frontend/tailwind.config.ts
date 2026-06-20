@@ -3,11 +3,35 @@ import type { Config } from "tailwindcss";
 const config: Config = {
   content: ["./app/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}", "./lib/**/*.{ts,tsx}"],
   theme: {
-    extend: {
-      colors: {
-        brand: {
-          50: "#effaf7",
-          100: "#d9f1ea",
+      extend: {
+        colors: {
+          blue: {
+            50: "#effaf7",
+            100: "#d9f1ea",
+            200: "#b9e4d7",
+            300: "#88cfb8",
+            400: "#57b997",
+            500: "#2b9e7a",
+            600: "#1e8a68",
+            700: "#16684f",
+            800: "#0f4f3d",
+            900: "#0c3e31",
+          },
+          sky: {
+            50: "#effaf7",
+            100: "#d9f1ea",
+            200: "#b9e4d7",
+            300: "#88cfb8",
+            400: "#57b997",
+            500: "#2b9e7a",
+            600: "#1e8a68",
+            700: "#16684f",
+            800: "#0f4f3d",
+            900: "#0c3e31",
+          },
+          brand: {
+            50: "#effaf7",
+            100: "#d9f1ea",
           200: "#b9e4d7",
           300: "#88cfb8",
           400: "#57b997",
@@ -43,4 +67,3 @@ const config: Config = {
 };
 
 export default config;
-

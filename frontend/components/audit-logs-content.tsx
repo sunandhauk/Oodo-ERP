@@ -27,7 +27,7 @@ type FilterState = {
 
 const actionBadgeClass: Record<string, string> = {
   Created: "bg-emerald-50 text-emerald-700 ring-emerald-100",
-  Updated: "bg-blue-50 text-blue-700 ring-blue-100",
+  Updated: "bg-brand-50 text-brand-700 ring-brand-100",
   Deleted: "bg-rose-50 text-rose-700 ring-rose-100",
   Viewed: "bg-slate-100 text-slate-700 ring-slate-200",
   Opened: "bg-violet-50 text-violet-700 ring-violet-100",
@@ -264,7 +264,7 @@ export function AuditLogsContent() {
       </section>
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
-        <InfoCard title="Total Logs" count={summary.total} caption="All time activity" accent="#eff6ff" icon={<ShieldIcon className="h-5 w-5 text-blue-600" />} />
+        <InfoCard title="Total Logs" count={summary.total} caption="All time activity" accent="#effaf7" icon={<ShieldIcon className="h-5 w-5 text-brand-600" />} />
         <InfoCard title="Auth Events" count={summary.auth} caption="Sign in / sign up / sign out" accent="#ecfdf5" icon={<UserIcon className="h-5 w-5 text-emerald-600" />} />
         <InfoCard title="Navigation" count={summary.navigation} caption="Page and menu views" accent="#f5f3ff" icon={<DashboardIcon className="h-5 w-5 text-violet-600" />} />
         <InfoCard title="Data Changes" count={summary.dataChanges} caption="Create, update, delete" accent="#fff7ed" icon={<ShieldIcon className="h-5 w-5 text-amber-600" />} />

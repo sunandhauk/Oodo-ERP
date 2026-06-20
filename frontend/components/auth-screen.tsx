@@ -43,6 +43,7 @@ function FieldShell({
 function TextField({
   value,
   onChange,
+  onBlur,
   placeholder,
   type = "text",
   error,
@@ -55,6 +56,7 @@ function TextField({
 }: {
   value: string;
   onChange: (value: string) => void;
+  onBlur?: () => void;
   placeholder: string;
   type?: string;
   error?: string;
@@ -84,11 +86,12 @@ function TextField({
         name={name}
         value={value}
         onChange={(event) => onChange(event.target.value)}
+        onBlur={onBlur}
         placeholder={placeholder}
         type={type}
         autoComplete={autoComplete}
         inputMode={inputMode}
-        className="h-full flex-1 bg-transparent px-2 text-[0.88rem] text-ink-800 outline-none placeholder:text-ink-400/80 sm:px-4 sm:text-[1rem]"
+        className="h-full flex-1 bg-transparent px-3 text-[0.96rem] text-ink-800 outline-none placeholder:text-ink-400/80 sm:px-4 sm:text-[1rem]"
       />
       {rightSlot ? <div className="pl-2">{rightSlot}</div> : null}
     </div>
@@ -104,6 +107,8 @@ export function AuthScreen({ variant }: AuthScreenProps) {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [submitError, setSubmitError] = useState("");
+  const [loginTouched, setLoginTouched] = useState<Partial<Record<keyof LoginState, boolean>>>({});
+  const [signupTouched, setSignupTouched] = useState<Partial<Record<keyof SignupState, boolean>>>({});
   const [loginValues, setLoginValues] = useState<LoginState>({
     loginId: "",
     password: "",
@@ -114,8 +119,7 @@ export function AuthScreen({ variant }: AuthScreenProps) {
     password: "",
     confirmPassword: "",
   });
-  const [loginErrors, setLoginErrors] = useState<Partial<Record<keyof LoginState, string>>>({});
-  const [signupErrors, setSignupErrors] = useState<Partial<Record<keyof SignupState, string>>>({});
+  const [submitAttempted, setSubmitAttempted] = useState(false);
 
   useEffect(() => {
     appendAuditLog({
@@ -129,7 +133,7 @@ export function AuthScreen({ variant }: AuthScreenProps) {
       newValue: variant,
       details: `Opened ${variant} page`,
     });
-  }, [appendAuditLog, variant]);
+  }, [appendAuditLog, mode]);
 
   const copy = useMemo(() => {
     if (variant === "admin-login") {
@@ -165,25 +169,32 @@ export function AuthScreen({ variant }: AuthScreenProps) {
       switchLabel: "Login as System Administrator",
       switchHref: "/login",
     };
-  }, [variant]);
+  }, [mode]);
 
   function updateLogin(field: keyof LoginState, value: string) {
     setLoginValues((current) => ({ ...current, [field]: value }));
-    setLoginErrors((current) => ({ ...current, [field]: undefined }));
     setSubmitError("");
   }
 
   function updateSignup(field: keyof SignupState, value: string) {
     setSignupValues((current) => ({ ...current, [field]: value }));
-    setSignupErrors((current) => ({ ...current, [field]: undefined }));
     setSubmitError("");
+  }
+
+  function markLoginTouched(field: keyof LoginState) {
+    setLoginTouched((current) => ({ ...current, [field]: true }));
+  }
+
+  function markSignupTouched(field: keyof SignupState) {
+    setSignupTouched((current) => ({ ...current, [field]: true }));
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSubmitError("");
+    setSubmitAttempted(true);
 
-    if (isLogin) {
+    if (mode === "login") {
       const errors = validateLogin(loginValues);
       setLoginErrors(errors);
 
@@ -219,10 +230,13 @@ export function AuthScreen({ variant }: AuthScreenProps) {
       return;
     }
 
-    const errors = validateSignup(signupValues);
-    setSignupErrors(errors);
-
-    if (Object.keys(errors).length > 0) {
+    if (Object.keys(signupErrors).length > 0) {
+      setSignupTouched({
+        loginId: true,
+        email: true,
+        password: true,
+        confirmPassword: true,
+      });
       return;
     }
 
@@ -263,16 +277,38 @@ export function AuthScreen({ variant }: AuthScreenProps) {
               <BrandMark className="h-full w-full" />
             </div>
 
-            <form onSubmit={handleSubmit} className={(isSignup ? "mt-5 w-full max-w-[620px]" : "mt-5 w-full max-w-[520px]")}>
-              <div className={isSignup ? "space-y-5" : "space-y-4"}>
-                {isSignup ? (
+            <h1
+              className={[
+                "mt-4 text-center font-extrabold tracking-[-0.045em] animate-fade-up",
+                isLogin ? "text-[clamp(2rem,4vw,3rem)] leading-[0.96] text-ink-800" : "text-[clamp(2.25rem,4.7vw,3.6rem)] leading-[0.95] text-brand-700",
+              ].join(" ")}
+            >
+              {copy.title}
+            </h1>
+
+            <div className="mt-3 text-center animate-fade-up" style={{ animationDelay: "80ms" }}>
+              <p
+                className={[
+                  "font-medium leading-tight text-brand-600",
+                  isLogin ? "text-[clamp(0.98rem,1.9vw,1.25rem)]" : "text-[clamp(1.1rem,2.2vw,1.5rem)]",
+                ].join(" ")}
+              >
+                {copy.subtitle}
+              </p>
+              {"description" in copy ? <p className="mt-2 text-[0.96rem] leading-tight text-ink-500 sm:text-[1rem]">{copy.description}</p> : null}
+            </div>
+
+            <form onSubmit={handleSubmit} className={(isLogin ? "mt-6 w-full max-w-[520px]" : "mt-7 w-full max-w-[620px]") + " animate-fade-up"} style={{ animationDelay: "120ms" }}>
+              <div className={isLogin ? "space-y-4" : "space-y-5"}>
+                {mode === "signup" ? (
                   <FieldShell label="Enter Login Id" error={signupErrors.loginId}>
                     <TextField
                       name="loginId"
                       value={signupValues.loginId}
                       onChange={(value) => updateSignup("loginId", value)}
-                      placeholder="Enter your login id"
-                      error={signupErrors.loginId}
+                      onBlur={() => markSignupTouched("loginId")}
+                      placeholder="Enter your name"
+                      error={(signupTouched.loginId || submitAttempted) ? signupErrors.loginId : undefined}
                       variant="signup"
                       autoComplete="username"
                       leftIcon={<UserIcon className="h-5 w-5" />}
@@ -280,14 +316,15 @@ export function AuthScreen({ variant }: AuthScreenProps) {
                   </FieldShell>
                 ) : null}
 
-                {isSignup ? (
+                {mode === "signup" ? (
                   <FieldShell label="Enter Email Id" error={signupErrors.email}>
                     <TextField
                       name="email"
                       value={signupValues.email}
                       onChange={(value) => updateSignup("email", value)}
+                      onBlur={() => markSignupTouched("email")}
                       placeholder="Enter your email id"
-                      error={signupErrors.email}
+                      error={(signupTouched.email || submitAttempted) ? signupErrors.email : undefined}
                       variant="signup"
                       autoComplete="email"
                       inputMode="email"
@@ -296,14 +333,15 @@ export function AuthScreen({ variant }: AuthScreenProps) {
                   </FieldShell>
                 ) : null}
 
-                <FieldShell label={isLogin ? "Login ID" : "Enter Password"} error={isLogin ? loginErrors.loginId : signupErrors.password}>
-                  {isLogin ? (
+                <FieldShell label={mode === "login" ? "Login ID" : "Enter Password"} error={mode === "login" ? loginErrors.loginId : signupErrors.password}>
+                  {mode === "login" ? (
                     <TextField
                       name="loginId"
                       value={loginValues.loginId}
                       onChange={(value) => updateLogin("loginId", value)}
+                      onBlur={() => markLoginTouched("loginId")}
                       placeholder="Enter your login ID"
-                      error={loginErrors.loginId}
+                      error={(loginTouched.loginId || submitAttempted) ? loginErrors.loginId : undefined}
                       variant="login"
                       autoComplete="username"
                       leftIcon={<UserIcon className="h-5 w-5" />}
@@ -313,8 +351,9 @@ export function AuthScreen({ variant }: AuthScreenProps) {
                       name="password"
                       value={signupValues.password}
                       onChange={(value) => updateSignup("password", value)}
+                      onBlur={() => markSignupTouched("password")}
                       placeholder="Enter your password"
-                      error={signupErrors.password}
+                      error={(signupTouched.password || submitAttempted) ? signupErrors.password : undefined}
                       variant="signup"
                       autoComplete="new-password"
                       type={showPassword ? "text" : "password"}
@@ -333,14 +372,15 @@ export function AuthScreen({ variant }: AuthScreenProps) {
                   )}
                 </FieldShell>
 
-                {isLogin ? (
+                {mode === "login" ? (
                   <FieldShell label="Password" error={loginErrors.password}>
                     <TextField
                       name="password"
                       value={loginValues.password}
                       onChange={(value) => updateLogin("password", value)}
+                      onBlur={() => markLoginTouched("password")}
                       placeholder="Enter your password"
-                      error={loginErrors.password}
+                      error={(loginTouched.password || submitAttempted) ? loginErrors.password : undefined}
                       variant="login"
                       autoComplete="current-password"
                       type={showPassword ? "text" : "password"}
@@ -359,14 +399,15 @@ export function AuthScreen({ variant }: AuthScreenProps) {
                   </FieldShell>
                 ) : null}
 
-                {isSignup ? (
+                {mode === "signup" ? (
                   <FieldShell label="Re-Enter Password" error={signupErrors.confirmPassword}>
                     <TextField
                       name="confirmPassword"
                       value={signupValues.confirmPassword}
                       onChange={(value) => updateSignup("confirmPassword", value)}
+                      onBlur={() => markSignupTouched("confirmPassword")}
                       placeholder="Re-enter your password"
-                      error={signupErrors.confirmPassword}
+                      error={(signupTouched.confirmPassword || submitAttempted) ? signupErrors.confirmPassword : undefined}
                       variant="signup"
                       autoComplete="new-password"
                       type={showConfirmPassword ? "text" : "password"}
