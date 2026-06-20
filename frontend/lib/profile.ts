@@ -26,16 +26,44 @@ function buildEmployeeId(sub: string) {
   return `EMP-${cleaned.slice(0, 8).padEnd(8, "0") || "00000000"}`;
 }
 
-export function createDefaultProfile(user: SessionUser): EditableProfile {
-  const email = user.email ?? `${user.loginId.toLowerCase().replace(/\s+/g, ".")}@oodo.local`;
+function getPrimaryRole(user: SessionUser) {
+  return (user.roles[0] ?? "viewer").toLowerCase();
+}
 
+function describeRole(user: SessionUser) {
+  switch (getPrimaryRole(user)) {
+    case "admin":
+      return "System Administrator";
+    case "user":
+      return "System User";
+    case "viewer":
+      return "Read-Only Viewer";
+    default:
+      return "ERP User";
+  }
+}
+
+function describeDepartment(user: SessionUser) {
+  switch (getPrimaryRole(user)) {
+    case "admin":
+      return "Administration";
+    case "user":
+      return "Operations";
+    case "viewer":
+      return "Review";
+    default:
+      return "General";
+  }
+}
+
+export function createDefaultProfile(user: SessionUser): EditableProfile {
   return {
     displayName: user.displayName,
     loginId: user.loginId,
-    email,
+    email: user.email,
     phone: "+91 80000 00000",
-    role: user.kind === "signup" ? "Account Owner" : user.kind === "login" ? "Sales Manager" : "Demo User",
-    department: user.kind === "signup" ? "Operations" : user.kind === "login" ? "Sales" : "Training",
+    role: describeRole(user),
+    department: describeDepartment(user),
     location: "Chennai, India",
     employeeId: buildEmployeeId(user.sub),
     bio: "Manage your ERP profile, picture, and access details from this screen.",

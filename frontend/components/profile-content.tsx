@@ -218,7 +218,9 @@ export function ProfileContent({ user }: { user: SessionUser }) {
                   className="min-w-[150px] rounded-xl border border-transparent bg-transparent outline-none transition focus:border-slate-200 focus:bg-slate-50 focus:px-3 focus:py-1"
                 />
               </div>
-              <p className="mt-2 text-[0.96rem] text-slate-600">Login session: {user.kind}</p>
+              <p className="mt-2 text-[0.96rem] text-slate-600">
+                Session roles: {user.roles.length > 0 ? user.roles.join(", ") : "viewer"}
+              </p>
 
               <div className="mt-5 grid gap-3 text-[0.95rem] text-slate-700 sm:grid-cols-2">
                 <div className="flex items-center gap-3">
@@ -335,7 +337,8 @@ export function ProfileContent({ user }: { user: SessionUser }) {
           </div>
           <div className="mt-2">
             <SectionRow label="Password" value="••••••••••••" />
-            <SectionRow label="Session Kind" value={user.kind} />
+            <SectionRow label="Session Roles" value={user.roles.length > 0 ? user.roles.join(", ") : "viewer"} />
+            <SectionRow label="Account Status" value={user.status} />
             <SectionRow label="Joined On" value={joinedOn} />
             <SectionRow label="Avatar" value={draft.avatarDataUrl ? "Uploaded" : "Default"} />
             <SectionRow label="Changes" value="Editable and saved locally" />

@@ -1,5 +1,11 @@
 import { NextResponse } from "next/server";
-import { createSessionCookie, createSessionToken } from "@/lib/auth";
+import {
+  decodeSessionToken,
+  createSessionCookie,
+  mapBackendUserToSessionUser,
+  type BackendUserRecord,
+} from "@/lib/auth";
+import { getBackendApiBaseUrl, getBackendErrorMessage, readBackendEnvelope } from "@/lib/backend";
 
 type SignupBody = {
   loginId?: string;
@@ -15,15 +21,40 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "All required fields must be filled in." }, { status: 400 });
   }
 
-  const { token, user } = createSessionToken({
-    loginId: body.loginId,
-    email: body.email,
-    kind: "signup",
-  });
+  try {
+    const response = await fetch(`${getBackendApiBaseUrl()}/api/auth/register`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        email: body.email.trim(),
+        loginId: body.loginId.trim(),
+        fullName: body.loginId.trim(),
+        password: body.password,
+      }),
+      cache: "no-store",
+    });
 
-  const response = NextResponse.json({ user });
-  response.cookies.set(createSessionCookie(token));
+    const payload = await readBackendEnvelope<{ accessToken: string; user: BackendUserRecord }>(response);
+    if (!response.ok || payload.status !== "success" || !payload.data?.accessToken || !payload.data?.user) {
+      return NextResponse.json(
+        { error: getBackendErrorMessage(payload.error) },
+        { status: response.status >= 400 ? response.status : 400 },
+      );
+    }
 
-  return response;
+    const claims = decodeSessionToken(payload.data.accessToken);
+    if (!claims) {
+      return NextResponse.json({ error: "The backend returned an invalid session token." }, { status: 502 });
+    }
+
+    const user = mapBackendUserToSessionUser(payload.data.user, claims);
+    const nextResponse = NextResponse.json({ user });
+    nextResponse.cookies.set(createSessionCookie(payload.data.accessToken));
+
+    return nextResponse;
+  } catch {
+    return NextResponse.json({ error: "Auth backend is unavailable." }, { status: 503 });
+  }
 }
-

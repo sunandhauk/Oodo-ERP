@@ -28,7 +28,8 @@ export function LogoutButton({ user }: { user: SessionUser }) {
         newValue: "Closed",
         details: `Logged out from ${user.loginId}`,
       });
-      router.replace("/login");
+      const isAdmin = user.roles.includes("admin");
+      router.replace(isAdmin ? "/login" : "/user-login");
     } finally {
       setLoading(false);
     }

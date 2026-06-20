@@ -37,12 +37,6 @@ export const authClient = {
   signup(values: SignupFormValues) {
     return postJson("/api/auth/signup", values);
   },
-  demoLogin() {
-    return postJson("/api/auth/login", {
-      loginId: "Demo User",
-      password: "demo-session",
-    });
-  },
   async logout() {
     const response = await fetch("/api/auth/logout", {
       method: "POST",
