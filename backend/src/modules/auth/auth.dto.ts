@@ -1,14 +1,21 @@
-import { IsEmail, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsEmail, IsOptional, IsString, Length, Matches, MinLength } from 'class-validator';
 
 export class RegisterDto {
   @IsEmail()
   email!: string;
 
   @IsString()
-  fullName!: string;
+  @Length(6, 12)
+  @Matches(/^[a-zA-Z0-9._-]+$/)
+  loginId!: string;
+
+  @IsOptional()
+  @IsString()
+  fullName?: string;
 
   @IsString()
-  @MinLength(8)
+  @MinLength(9)
+  @Matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*[^A-Za-z0-9]).+$/)
   password!: string;
 
   @IsOptional()
@@ -17,9 +24,15 @@ export class RegisterDto {
 }
 
 export class LoginDto {
-  @IsEmail()
-  email!: string;
+  @IsString()
+  @Length(6, 12)
+  @Matches(/^[a-zA-Z0-9._-]+$/)
+  loginId!: string;
 
   @IsString()
   password!: string;
+
+  @IsOptional()
+  @IsString()
+  portal?: 'admin' | 'user';
 }

@@ -14,7 +14,7 @@ export class MasterDataController {
   ) {}
 
   @Get('products')
-  @Permissions('master-data.manage')
+  @Permissions('product.view')
   async listProducts(@Query('q') query?: string) {
     const tenantId = this.requestContext.getTenantId();
     const rows = await this.database.query(
@@ -35,7 +35,7 @@ export class MasterDataController {
   }
 
   @Post('products')
-  @Permissions('master-data.manage')
+  @Permissions('product.create')
   async createProduct(@Body() dto: CreateProductDto, @CurrentUser() actor: { id: string } | null) {
     const tenantId = this.requestContext.getTenantId();
     const row = await this.database.queryOne<{ id: string }>(

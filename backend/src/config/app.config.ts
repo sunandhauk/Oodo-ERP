@@ -12,6 +12,7 @@ export interface AppConfig {
   supabaseServiceRoleKey: string;
   supabaseStorageBucket: string;
   adminEmail: string;
+  adminLoginId: string;
   adminPassword: string;
   adminName: string;
   requestRateLimitWindowMs: number;
@@ -44,6 +45,7 @@ export const buildAppConfig = (): AppConfig => ({
   supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
   supabaseStorageBucket: process.env.SUPABASE_STORAGE_BUCKET || 'erp-files',
   adminEmail: process.env.ADMIN_EMAIL || 'admin@oodo.local',
+  adminLoginId: process.env.ADMIN_LOGIN_ID || 'systemadmin',
   adminPassword: process.env.ADMIN_PASSWORD || 'ChangeMe123!',
   adminName: process.env.ADMIN_NAME || 'System Admin',
   requestRateLimitWindowMs: toInt(process.env.REQUEST_RATE_LIMIT_WINDOW_MS, 60000),

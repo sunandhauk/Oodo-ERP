@@ -62,12 +62,13 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     const user = await this.queryOne<{
       id: string;
       tenant_id: string;
+      login_id: string;
       email: string;
       password_hash: string;
       full_name: string;
       status: string;
     }>(
-      `select id, tenant_id, email, password_hash, full_name, status
+      `select id, tenant_id, login_id, email, password_hash, full_name, status
        from app_users
        where tenant_id = $1 and lower(email) = lower($2)
        limit 1`,
@@ -77,15 +78,40 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     return user;
   }
 
+  async findUserByLoginIdentifier(tenantId: string, loginId: string) {
+    const user = await this.queryOne<{
+      id: string;
+      tenant_id: string;
+      login_id: string;
+      email: string;
+      password_hash: string;
+      full_name: string;
+      status: string;
+    }>(
+      `select id, tenant_id, login_id, email, password_hash, full_name, status
+       from app_users
+       where tenant_id = $1 and lower(login_id) = lower($2)
+       limit 1`,
+      [tenantId, loginId],
+    );
+
+    return user;
+  }
+
+  async findUserByLoginId(tenantId: string, loginId: string) {
+    return this.findUserByLoginIdentifier(tenantId, loginId);
+  }
+
   async findUserById(userId: string, tenantId: string): Promise<AppUserRecord | null> {
     const user = await this.queryOne<{
       id: string;
       tenant_id: string;
+      login_id: string;
       email: string;
       full_name: string;
       status: string;
     }>(
-      `select id, tenant_id, email, full_name, status
+      `select id, tenant_id, login_id, email, full_name, status
        from app_users
        where id = $1 and tenant_id = $2
        limit 1`,
@@ -117,6 +143,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     return {
       id: user.id,
       tenant_id: user.tenant_id,
+      login_id: user.login_id,
       email: user.email,
       full_name: user.full_name,
       status: user.status,
@@ -337,18 +364,19 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
 
   async createBaselineUser(input: {
     tenantId: string;
+    loginId: string;
     email: string;
     passwordHash: string;
     fullName: string;
     roleNames: string[];
   }) {
     const user = await this.queryOne<{ id: string }>(
-      `insert into app_users (tenant_id, email, password_hash, full_name, status)
-       values ($1, $2, $3, $4, 'active')
-       on conflict (tenant_id, email)
-       do update set password_hash = excluded.password_hash, full_name = excluded.full_name
+      `insert into app_users (tenant_id, login_id, email, password_hash, full_name, status)
+       values ($1, $2, $3, $4, $5, 'active')
+       on conflict (tenant_id, login_id)
+       do update set password_hash = excluded.password_hash, email = excluded.email, full_name = excluded.full_name
        returning id`,
-      [input.tenantId, input.email, input.passwordHash, input.fullName],
+      [input.tenantId, input.loginId, input.email, input.passwordHash, input.fullName],
     );
     if (!user) {
       throw new Error('Unable to seed baseline user');

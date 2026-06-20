@@ -19,7 +19,7 @@ export class UsersController {
   async list() {
     const tenantId = this.requestContext.getTenantId();
     const rows = await this.database.query(
-      `select id, email, full_name, status, created_at
+      `select id, login_id, email, full_name, status, created_at
        from app_users
        where tenant_id = $1
        order by created_at desc`,
@@ -41,10 +41,10 @@ export class UsersController {
     const tenantId = this.requestContext.getTenantId();
     const passwordHash = hashPassword(dto.password);
     const user = await this.database.queryOne<{ id: string }>(
-      `insert into app_users (tenant_id, email, password_hash, full_name, status)
-       values ($1, $2, $3, $4, 'active')
+      `insert into app_users (tenant_id, login_id, email, password_hash, full_name, status)
+       values ($1, $2, $3, $4, $5, 'active')
        returning id`,
-      [tenantId, dto.email, passwordHash, dto.fullName],
+      [tenantId, dto.loginId, dto.email, passwordHash, dto.fullName],
     );
     if (!user) throw new Error('Unable to create user');
 
@@ -61,13 +61,13 @@ export class UsersController {
     }
 
     const profile = await this.database.findUserById(user.id, tenantId);
-    await this.database.insertAuditLog({
+      await this.database.insertAuditLog({
       tenantId,
       actorUserId: actor?.id || null,
       entityType: 'user',
       entityId: user.id,
       action: 'created',
-      afterData: { email: dto.email, fullName: dto.fullName, roles: dto.roles || ['viewer'] },
+      afterData: { loginId: dto.loginId, email: dto.email, fullName: dto.fullName, roles: dto.roles || ['viewer'] },
     });
     return {
       status: RequestStatus.Success,

@@ -17,7 +17,7 @@ export class ProcurementController {
   ) {}
 
   @Post('from-demand/:demandId')
-  @Permissions('procurement.manage')
+  @Permissions('purchase.create')
   @ProgressRoute()
   async createFromDemand(
     @Param('demandId') demandId: string,
@@ -40,7 +40,7 @@ export class ProcurementController {
   }
 
   @Post(':id/receive')
-  @Permissions('procurement.manage')
+  @Permissions('purchase.approve')
   async receive(@Param('id') id: string, @Body() dto: ReceiveProcurementDto, @CurrentUser() actor: { id: string } | null) {
     const current = await this.database.queryOne<{ status: string; tenant_id: string; demand_id: string | null }>(
       `select status, tenant_id, demand_id from app_procurements where id = $1 limit 1`,
