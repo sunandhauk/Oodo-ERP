@@ -6,6 +6,6 @@ import { appConfigProvider } from '../config/app.config';
 @Global()
 @Module({
   providers: [appConfigProvider, RequestContextService, DatabaseService],
-  exports: [DatabaseService, RequestContextService],
+  exports: [DatabaseService, RequestContextService, appConfigProvider],
 })
 export class DatabaseModule {}

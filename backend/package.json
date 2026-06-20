@@ -1,14 +1,14 @@
 {
-  "name": "oodo-erp-backend",
+  "name": "odoo-erp-backend",
   "version": "1.0.0",
   "private": true,
   "description": "NestJS backend for the Mini ERP demand-to-delivery flow",
   "license": "UNLICENSED",
   "scripts": {
     "build": "nest build",
-    "start": "nest start",
-    "start:dev": "nest start --watch",
-    "start:prod": "node dist/main.js",
+    "start": "node --env-file=.env node_modules/@nestjs/cli/bin/nest.js start",
+    "start:dev": "node --env-file=.env node_modules/@nestjs/cli/bin/nest.js start --watch",
+    "start:prod": "node --env-file=.env dist/main.js",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage"

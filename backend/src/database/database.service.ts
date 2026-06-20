@@ -1,6 +1,5 @@
 import { Inject, Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
-import { Pool, PoolConfig, QueryResultRow } from 'pg';
-import { randomUUID } from 'crypto';
+import { Pool, QueryResultRow } from 'pg';
 import { APP_CONFIG, AppConfig } from '../config/app.config';
 import { AppUserRecord, IdempotencyRecord } from './types';
 import { RequestStatus } from '../common/enums/request-status.enum';
@@ -10,19 +9,17 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
   private readonly pool: Pool;
 
   constructor(@Inject(APP_CONFIG) private readonly config: AppConfig) {
-    const poolConfig: PoolConfig = {
-      host: config.dbHost,
-      port: config.dbPort,
-      user: config.dbUser,
-      password: config.dbPassword,
-      database: config.dbDatabase,
-      ssl: config.dbSsl ? { rejectUnauthorized: false } : undefined,
-    };
-    this.pool = new Pool(poolConfig);
+    if (!config.databaseUrl) {
+      throw new Error('DATABASE_URL must be set to a Supabase Postgres connection string.');
+    }
+    this.pool = new Pool({
+      connectionString: config.databaseUrl,
+      ssl: { rejectUnauthorized: false },
+    });
   }
 
   async onModuleInit() {
-    await this.pool.query(`select 1`);
+    // Database connectivity is established on demand through the pooled connection.
   }
 
   async onModuleDestroy() {

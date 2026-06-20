@@ -1,4 +1,6 @@
-export interface AppUserRecord {
+import { QueryResultRow } from 'pg';
+
+export interface AppUserRecord extends QueryResultRow {
   id: string;
   tenant_id: string;
   email: string;
@@ -8,7 +10,7 @@ export interface AppUserRecord {
   permissions: string[];
 }
 
-export interface IdempotencyRecord {
+export interface IdempotencyRecord extends QueryResultRow {
   id: string;
   tenant_id: string;
   method: string;

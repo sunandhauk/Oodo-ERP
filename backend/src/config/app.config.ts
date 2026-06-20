@@ -7,12 +7,7 @@ export interface AppConfig {
   defaultTenantId: string;
   jwtSecret: string;
   jwtTtlSeconds: number;
-  dbHost: string;
-  dbPort: number;
-  dbUser: string;
-  dbPassword: string;
-  dbDatabase: string;
-  dbSsl: boolean;
+  databaseUrl: string;
   supabaseUrl: string;
   supabaseServiceRoleKey: string;
   supabaseStorageBucket: string;
@@ -44,12 +39,7 @@ export const buildAppConfig = (): AppConfig => ({
   defaultTenantId: process.env.DEFAULT_TENANT_ID || 'default',
   jwtSecret: process.env.JWT_SECRET || 'change-me',
   jwtTtlSeconds: toInt(process.env.JWT_TTL_SECONDS, 86400),
-  dbHost: process.env.DB_HOST || 'localhost',
-  dbPort: toInt(process.env.DB_PORT, 5432),
-  dbUser: process.env.DB_USER || 'postgres',
-  dbPassword: process.env.DB_PASSWORD || 'postgres',
-  dbDatabase: process.env.DB_DATABASE || 'oodo_erp',
-  dbSsl: toBool(process.env.DB_SSL, false),
+  databaseUrl: process.env.DATABASE_URL || '',
   supabaseUrl: process.env.SUPABASE_URL || '',
   supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
   supabaseStorageBucket: process.env.SUPABASE_STORAGE_BUCKET || 'erp-files',

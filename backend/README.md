@@ -13,7 +13,7 @@ NestJS backend for the Mini ERP demand-to-delivery flow.
 
 1. Copy `.env.example` to `.env`.
 2. Apply `supabase/migrations/0001_init.sql` to your Supabase Postgres database.
-3. Set `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and the Postgres connection values.
+3. Set `DATABASE_URL` to your Supabase Postgres connection string, plus `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`.
 4. Start the app with `npm run start:dev` after installing dependencies.
 
 ## Key Endpoints
