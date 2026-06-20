@@ -6,11 +6,11 @@ import type { ComponentType, SVGProps } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { BrandMark } from "@/components/brand-mark";
 import { useAuditLog } from "@/components/audit-log-provider";
+import { NotificationCenter } from "@/components/notification-center";
 import { LogoutButton } from "@/components/logout-button";
 import { useEditableProfile } from "@/components/profile-store";
 import {
   BagIcon,
-  BellIcon,
   CalendarIcon,
   CartIcon,
   ChevronDownIcon,
@@ -48,12 +48,6 @@ type MetricCard = {
   stroke: string;
   icon: ComponentType<SVGProps<SVGSVGElement>>;
   spark: number[];
-};
-
-type PipelineStage = {
-  label: string;
-  value: string;
-  accent: string;
 };
 
 function BadgeIcon({
@@ -132,6 +126,7 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
   const { appendAuditLog } = useAuditLog();
   const { profile } = useEditableProfile(user);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const todayLabel = useMemo(
     () =>
@@ -147,10 +142,10 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
     () => [
       { label: "Dashboard", icon: DashboardIcon, path: "/dashboard", scrollTargetId: "dashboard-top" },
       { label: "Sales Orders", icon: CartIcon, path: "/sales-orders" },
-      { label: "Purchase Orders", icon: BagIcon, scrollTargetId: "purchase-orders-overview" },
-      { label: "Manufacturing Orders", icon: FactoryIcon, scrollTargetId: "manufacturing-orders-pipeline" },
-      { label: "Bills of Materials", icon: ReceiptIcon, scrollTargetId: "manufacturing-orders-pipeline" },
-      { label: "Products", icon: BoxIcon, scrollTargetId: "dashboard-top" },
+      { label: "Purchase Orders", icon: BagIcon, path: "/purchase-orders" },
+      { label: "Manufacturing Orders", icon: FactoryIcon, path: "/manufacturing-orders" },
+      { label: "Bills of Materials", icon: ReceiptIcon, path: "/bills-of-materials" },
+      { label: "Products", icon: BoxIcon, path: "/products" },
       { label: "Audit Logs", icon: ShieldIcon, path: "/audit-logs" },
     ],
     [],
@@ -203,10 +198,6 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
       newValue: nextOpen ? "Opened" : "Closed",
       details: "Sidebar visibility changed from the top menu button",
     });
-  }
-
-  function toggleSidebar() {
-    setSidebarVisible(!sidebarOpen);
   }
 
   function closeSidebar() {
@@ -271,20 +262,12 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
   }
 
   const metrics: MetricCard[] = [
-    { label: "Total Sales Orders", value: "32", delta: "12% from last month", color: "text-blue-600", bg: "bg-blue-50", stroke: "#3b82f6", icon: CartIcon, spark: [18, 22, 21, 27, 24, 30] },
+    { label: "Total Sales Orders", value: "32", delta: "12% from last month", color: "text-brand-600", bg: "bg-brand-50", stroke: "#2b9e7a", icon: CartIcon, spark: [18, 22, 21, 27, 24, 30] },
     { label: "Total Purchase Orders", value: "32", delta: "8% from last month", color: "text-emerald-600", bg: "bg-emerald-50", stroke: "#10b981", icon: BagIcon, spark: [16, 20, 19, 24, 23, 28] },
     { label: "Manufacturing Orders", value: "36", delta: "15% from last month", color: "text-violet-600", bg: "bg-violet-50", stroke: "#8b5cf6", icon: FactoryIcon, spark: [15, 19, 18, 25, 26, 31] },
     { label: "Pending Deliveries", value: "18", delta: "9% from last month", color: "text-amber-600", bg: "bg-amber-50", stroke: "#f59e0b", icon: TruckIcon, spark: [12, 13, 15, 17, 16, 19] },
     { label: "Delayed Orders", value: "22", delta: "5% from last month", color: "text-rose-600", bg: "bg-rose-50", stroke: "#ef4444", icon: ClockIcon, spark: [14, 15, 14, 18, 17, 20] },
     { label: "Partial Receipts", value: "7", delta: "4% from last month", color: "text-cyan-600", bg: "bg-cyan-50", stroke: "#06b6d4", icon: ReceiptIcon, spark: [8, 9, 10, 11, 12, 13] },
-  ];
-
-  const pipeline: PipelineStage[] = [
-    { label: "Draft", value: "2", accent: "#3b82f6" },
-    { label: "Confirmed", value: "7", accent: "#10b981" },
-    { label: "In-Progress", value: "12", accent: "#8b5cf6" },
-    { label: "To Close", value: "6", accent: "#f59e0b" },
-    { label: "Done", value: "5", accent: "#22c55e" },
   ];
 
   return (
@@ -294,7 +277,7 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
 
         <aside
           className={[
-            "fixed inset-y-0 left-0 z-50 w-[286px] overflow-hidden transform border-r border-slate-200/80 bg-white/95 shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur-xl transition-transform duration-300 lg:sticky lg:top-0 lg:z-auto lg:translate-x-0 lg:shadow-none",
+            "fixed inset-y-0 left-0 z-50 w-[286px] overflow-hidden transform border-r border-brand-100/80 bg-[linear-gradient(180deg,rgba(239,250,247,0.98)_0%,rgba(247,252,250,0.96)_42%,rgba(233,247,242,0.96)_100%)] shadow-[0_18px_50px_rgba(31,158,122,0.08)] backdrop-blur-xl transition-transform duration-300 lg:sticky lg:top-0 lg:z-auto lg:translate-x-0 lg:shadow-none",
             sidebarOpen ? "translate-x-0" : "-translate-x-full",
           ].join(" ")}
         >
@@ -322,10 +305,10 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
                     onClick={() => handleSidebarItemClick(item)}
                     className={[
                       "flex w-full items-center gap-4 rounded-2xl px-4 py-3.5 text-left text-[0.96rem] font-semibold transition duration-200 hover:-translate-y-0.5 active:scale-[0.99]",
-                      isActive ? "bg-[#eef4ff] text-blue-700 shadow-[inset_0_0_0_1px_rgba(59,130,246,0.08)]" : "text-slate-700 hover:bg-slate-50 hover:text-slate-900",
+                      isActive ? "bg-[#edf9f4] text-brand-700 shadow-[inset_0_0_0_1px_rgba(31,158,122,0.08)]" : "text-slate-700 hover:bg-slate-50 hover:text-slate-900",
                     ].join(" ")}
                   >
-                    <span className={isActive ? "text-blue-600" : "text-slate-500"}>
+                    <span className={isActive ? "text-brand-600" : "text-slate-500"}>
                       <Icon className="h-5 w-5" />
                     </span>
                     <span>{item.label}</span>
@@ -334,21 +317,7 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
               })}
             </nav>
 
-            <div className="px-4 pb-5">
-              <div className="rounded-[22px] border border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#f7fbff_100%)] p-3.5 shadow-[0_18px_40px_rgba(15,23,42,0.05)] animate-fade-up" style={{ animationDelay: "60ms" }}>
-                <div className="flex items-start gap-3">
-                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#eff6ff] text-blue-600">
-                    <span className="text-xl">📊</span>
-                  </div>
-                  <div>
-                    <p className="text-[0.95rem] font-bold text-slate-900">Your business, on track</p>
-                    <p className="mt-1 text-[0.8rem] leading-5 text-slate-500">Monitor, manage and grow with real-time insights.</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="border-t border-slate-200/70 p-4">
+            <div className="border-t border-brand-100/80 p-4">
               <LogoutButton user={user} />
             </div>
           </div>
@@ -357,34 +326,23 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
         <div className="flex min-w-0 flex-1 flex-col">
           <header className="flex h-[76px] items-center justify-between border-b border-slate-200/70 bg-white/70 px-4 backdrop-blur-xl sm:px-6">
             <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={toggleSidebar}
-                aria-expanded={sidebarOpen}
-                className="flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-sm transition duration-200 hover:bg-slate-50 active:scale-[0.98]"
-                aria-label="Open sidebar menu"
-              >
-                <MenuDotsIcon className="h-6 w-6" />
-              </button>
-
               <div className="hidden md:block">
                 <div className="relative w-[390px] max-w-[42vw]">
                   <SearchIcon className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
-                  <div className="h-12 rounded-full border border-slate-200 bg-white pl-12 pr-4 text-sm text-slate-400 shadow-[0_10px_24px_rgba(15,23,42,0.04)]">
-                    <div className="flex h-full items-center">Search anything...</div>
-                  </div>
+                  <input
+                    type="search"
+                    value={searchQuery}
+                    onChange={(event) => setSearchQuery(event.target.value)}
+                    placeholder="Search anything..."
+                    aria-label="Search anything"
+                    className="h-12 w-full rounded-full border border-slate-200 bg-white pl-12 pr-4 text-sm font-medium text-slate-900 shadow-[0_10px_24px_rgba(15,23,42,0.04)] outline-none transition placeholder:text-slate-400 focus:border-brand-300 focus:ring-4 focus:ring-brand-100"
+                  />
                 </div>
               </div>
             </div>
 
             <div className="flex items-center gap-3 sm:gap-4">
-              <button
-                type="button"
-                className="flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm transition duration-200 hover:bg-slate-50 active:scale-[0.98]"
-                aria-label="Notifications"
-              >
-                <BellIcon className="h-5 w-5" />
-              </button>
+              <NotificationCenter actorName={profile.displayName} />
 
               <button
                 type="button"
@@ -456,7 +414,7 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
                     <div>
                       <p className="text-[0.92rem] font-semibold text-slate-900">Overall Order Completion</p>
                       <div className="mt-3 flex items-center justify-center">
-                        <Donut percent={68} stroke="#3b82f6" label="Completed" />
+                        <Donut percent={68} stroke="#2b9e7a" label="Completed" />
                       </div>
                     </div>
                   </div>
@@ -464,15 +422,15 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
                   <div className="space-y-4">
                     <div className="h-3 rounded-full bg-slate-100 p-1">
                       <div className="flex h-full overflow-hidden rounded-full">
-                        <div className="w-[68%] bg-blue-500" />
-                        <div className="w-[17%] bg-emerald-500" />
-                        <div className="w-[11%] bg-amber-400" />
-                        <div className="w-[4%] bg-rose-500" />
+                        <div className="w-[68%] bg-brand-500" />
+                        <div className="w-[17%] bg-brand-400" />
+                        <div className="w-[11%] bg-brand-300" />
+                        <div className="w-[4%] bg-brand-700" />
                       </div>
                     </div>
                     <div className="grid grid-cols-4 gap-2 text-center text-[0.82rem] font-semibold text-slate-600 sm:text-[0.9rem]">
                       <div>
-                        <p className="text-blue-600">Completed</p>
+                        <p className="text-brand-600">Completed</p>
                         <p className="mt-1 text-slate-900">68%</p>
                       </div>
                       <div>
@@ -505,7 +463,7 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
                         <svg viewBox="0 0 200 200" className="h-full w-full -rotate-90">
                           <circle cx="100" cy="100" r="68" fill="none" stroke="#e8edf4" strokeWidth="30" />
                           <circle cx="100" cy="100" r="68" fill="none" stroke="#ef476f" strokeWidth="30" strokeDasharray="96 430" />
-                          <circle cx="100" cy="100" r="68" fill="none" stroke="#60a5fa" strokeWidth="30" strokeDasharray="153 430" strokeDashoffset="-96" />
+                          <circle cx="100" cy="100" r="68" fill="none" stroke="#57b997" strokeWidth="30" strokeDasharray="153 430" strokeDashoffset="-96" />
                           <circle cx="100" cy="100" r="68" fill="none" stroke="#22c55e" strokeWidth="30" strokeDasharray="94 430" strokeDashoffset="-249" />
                           <circle cx="100" cy="100" r="68" fill="none" stroke="#f59e0b" strokeWidth="30" strokeDasharray="38 430" strokeDashoffset="-343" />
                         </svg>
@@ -521,7 +479,7 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
                         ["Draft", "2 (6.3%)", "#94a3b8"],
                         ["Confirmed", "7 (21.9%)", "#22c55e"],
                         ["Partially Delivered", "1 (3.1%)", "#f59e0b"],
-                        ["Delivered", "11 (34.4%)", "#3b82f6"],
+                        ["Delivered", "11 (34.4%)", "#2b9e7a"],
                         ["Late", "11 (34.4%)", "#ef476f"],
                       ].map(([label, value, color]) => (
                         <div key={label} className="flex items-center justify-between gap-3">
@@ -548,7 +506,7 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
                         <svg viewBox="0 0 200 200" className="h-full w-full -rotate-90">
                           <circle cx="100" cy="100" r="68" fill="none" stroke="#e8edf4" strokeWidth="30" />
                           <circle cx="100" cy="100" r="68" fill="none" stroke="#22c55e" strokeWidth="30" strokeDasharray="210 430" />
-                          <circle cx="100" cy="100" r="68" fill="none" stroke="#3b82f6" strokeWidth="30" strokeDasharray="108 430" strokeDashoffset="-210" />
+                          <circle cx="100" cy="100" r="68" fill="none" stroke="#2b9e7a" strokeWidth="30" strokeDasharray="108 430" strokeDashoffset="-210" />
                           <circle cx="100" cy="100" r="68" fill="none" stroke="#f59e0b" strokeWidth="30" strokeDasharray="40 430" strokeDashoffset="-318" />
                         </svg>
                         <div className="absolute inset-0 flex flex-col items-center justify-center">
@@ -563,7 +521,7 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
                         <span className="font-semibold text-slate-900">Received vs Pending Trend</span>
                         <div className="flex items-center gap-4 text-[0.8rem] font-semibold">
                           <span className="flex items-center gap-2 text-emerald-600"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />Received</span>
-                          <span className="flex items-center gap-2 text-blue-600"><span className="h-2.5 w-2.5 rounded-full bg-blue-500" />Pending</span>
+                          <span className="flex items-center gap-2 text-brand-600"><span className="h-2.5 w-2.5 rounded-full bg-brand-500" />Pending</span>
                         </div>
                       </div>
                       <div className="h-36 rounded-[18px] bg-[linear-gradient(180deg,#ffffff_0%,#f8fbff_100%)] p-2.5">
@@ -573,7 +531,7 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
                           <path d="M30 86H395" stroke="#eef2f7" strokeWidth="1" />
                           <path d="M30 60H395" stroke="#eef2f7" strokeWidth="1" />
                           <polyline fill="none" stroke="#22c55e" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" points="30,120 85,112 140,104 195,96 250,84 305,76 360,66" />
-                          <polyline fill="none" stroke="#3b82f6" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" points="30,138 85,134 140,130 195,126 250,122 305,118 360,114" />
+                          <polyline fill="none" stroke="#2b9e7a" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" points="30,138 85,134 140,130 195,126 250,122 305,118 360,114" />
                           {[
                             [30, 120],
                             [85, 112],
@@ -594,7 +552,7 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
                             [305, 118],
                             [360, 114],
                           ].map(([x, y]) => (
-                            <circle key={`${x}-${y}`} cx={x} cy={y} r="3.5" fill="#3b82f6" />
+                            <circle key={`${x}-${y}`} cx={x} cy={y} r="3.5" fill="#2b9e7a" />
                           ))}
                           {["May 10", "May 11", "May 12", "May 13", "May 14", "May 15", "May 16"].map((label, index) => (
                             <text key={label} x={30 + index * 55} y="162" textAnchor="middle" fontSize="12" fill="#64748b">
@@ -608,36 +566,6 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
                 </article>
               </section>
 
-              <section className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-[0_16px_38px_rgba(15,23,42,0.05)] animate-fade-up" style={{ animationDelay: "280ms" }}>
-                <div className="flex items-center justify-between">
-                  <h2 className="text-[0.98rem] font-extrabold tracking-[-0.03em] text-slate-900">Manufacturing Orders Pipeline</h2>
-                  <span className="text-[0.78rem] font-semibold text-slate-500">Total Manufacturing Orders: 32</span>
-                </div>
-
-                <div className="mt-3 grid gap-2.5 xl:grid-cols-[repeat(5,minmax(0,1fr))]">
-                  {pipeline.map((stage, index) => (
-                    <div key={stage.label} className="flex items-center gap-3">
-                      <div className="min-w-0 flex-1 rounded-[18px] border border-slate-200 bg-slate-50 px-3 py-3 text-center">
-                        <div className="mx-auto mb-2 h-10 w-10 rounded-2xl" style={{ backgroundColor: `${stage.accent}26` }} />
-                        <p className="text-[0.84rem] font-semibold text-slate-600">{stage.label}</p>
-                        <div className="mt-1 text-[1.55rem] font-extrabold tracking-[-0.04em] text-slate-900">{stage.value}</div>
-                        <p className="text-[0.76rem] font-medium text-slate-500">Orders</p>
-                      </div>
-                      {index < pipeline.length - 1 ? <div className="hidden text-xl font-bold text-slate-400 xl:block">→</div> : null}
-                    </div>
-                  ))}
-                </div>
-
-                <div className="mt-4 h-2 rounded-full bg-slate-100">
-                  <div className="flex h-full overflow-hidden rounded-full">
-                    <div className="w-[6.3%] bg-blue-500" />
-                    <div className="w-[21.9%] bg-emerald-500" />
-                    <div className="w-[37.5%] bg-violet-500" />
-                    <div className="w-[18.6%] bg-amber-500" />
-                    <div className="w-[15.6%] bg-green-500" />
-                  </div>
-                </div>
-              </section>
               </div>
             )}
           </main>

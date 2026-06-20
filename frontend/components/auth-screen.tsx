@@ -43,6 +43,7 @@ function FieldShell({
 function TextField({
   value,
   onChange,
+  onBlur,
   placeholder,
   type = "text",
   error,
@@ -55,6 +56,7 @@ function TextField({
 }: {
   value: string;
   onChange: (value: string) => void;
+  onBlur?: () => void;
   placeholder: string;
   type?: string;
   error?: string;
@@ -84,10 +86,12 @@ function TextField({
         name={name}
         value={value}
         onChange={(event) => onChange(event.target.value)}
+        onBlur={onBlur}
         placeholder={placeholder}
         type={type}
         autoComplete={autoComplete}
         inputMode={inputMode}
+        required
         className="h-full flex-1 bg-transparent px-3 text-[0.96rem] text-ink-800 outline-none placeholder:text-ink-400/80 sm:px-4 sm:text-[1rem]"
       />
       {rightSlot ? <div className="pl-2">{rightSlot}</div> : null}
@@ -103,6 +107,8 @@ export function AuthScreen({ mode }: AuthScreenProps) {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [submitError, setSubmitError] = useState("");
+  const [loginTouched, setLoginTouched] = useState<Partial<Record<keyof LoginState, boolean>>>({});
+  const [signupTouched, setSignupTouched] = useState<Partial<Record<keyof SignupState, boolean>>>({});
   const [loginValues, setLoginValues] = useState<LoginState>({
     loginId: "",
     password: "",
@@ -113,8 +119,7 @@ export function AuthScreen({ mode }: AuthScreenProps) {
     password: "",
     confirmPassword: "",
   });
-  const [loginErrors, setLoginErrors] = useState<Partial<Record<keyof LoginState, string>>>({});
-  const [signupErrors, setSignupErrors] = useState<Partial<Record<keyof SignupState, string>>>({});
+  const [submitAttempted, setSubmitAttempted] = useState(false);
 
   useEffect(() => {
     appendAuditLog({
@@ -129,6 +134,15 @@ export function AuthScreen({ mode }: AuthScreenProps) {
       details: `Opened ${mode} page`,
     });
   }, [appendAuditLog, mode]);
+
+  useEffect(() => {
+    setShowPassword(false);
+    setShowConfirmPassword(false);
+    setLoginTouched({});
+    setSignupTouched({});
+    setSubmitAttempted(false);
+    setSubmitError("");
+  }, [mode]);
 
   const copy = useMemo(() => {
     if (mode === "login") {
@@ -153,27 +167,38 @@ export function AuthScreen({ mode }: AuthScreenProps) {
     };
   }, [mode]);
 
+  const loginErrors = useMemo(() => validateLogin(loginValues), [loginValues]);
+  const signupErrors = useMemo(() => validateSignup(signupValues), [signupValues]);
+
   function updateLogin(field: keyof LoginState, value: string) {
     setLoginValues((current) => ({ ...current, [field]: value }));
-    setLoginErrors((current) => ({ ...current, [field]: undefined }));
     setSubmitError("");
   }
 
   function updateSignup(field: keyof SignupState, value: string) {
     setSignupValues((current) => ({ ...current, [field]: value }));
-    setSignupErrors((current) => ({ ...current, [field]: undefined }));
     setSubmitError("");
+  }
+
+  function markLoginTouched(field: keyof LoginState) {
+    setLoginTouched((current) => ({ ...current, [field]: true }));
+  }
+
+  function markSignupTouched(field: keyof SignupState) {
+    setSignupTouched((current) => ({ ...current, [field]: true }));
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSubmitError("");
+    setSubmitAttempted(true);
 
     if (mode === "login") {
-      const errors = validateLogin(loginValues);
-      setLoginErrors(errors);
-
-      if (Object.keys(errors).length > 0) {
+      if (Object.keys(loginErrors).length > 0) {
+        setLoginTouched({
+          loginId: true,
+          password: true,
+        });
         return;
       }
 
@@ -202,10 +227,13 @@ export function AuthScreen({ mode }: AuthScreenProps) {
       return;
     }
 
-    const errors = validateSignup(signupValues);
-    setSignupErrors(errors);
-
-    if (Object.keys(errors).length > 0) {
+    if (Object.keys(signupErrors).length > 0) {
+      setSignupTouched({
+        loginId: true,
+        email: true,
+        password: true,
+        confirmPassword: true,
+      });
       return;
     }
 
@@ -295,13 +323,14 @@ export function AuthScreen({ mode }: AuthScreenProps) {
             <form onSubmit={handleSubmit} className={(isLogin ? "mt-6 w-full max-w-[520px]" : "mt-7 w-full max-w-[620px]") + " animate-fade-up"} style={{ animationDelay: "120ms" }}>
               <div className={isLogin ? "space-y-4" : "space-y-5"}>
                 {mode === "signup" ? (
-                  <FieldShell label="Enter Login Id" error={signupErrors.loginId}>
+                  <FieldShell label="Create account" error={(signupTouched.loginId || submitAttempted) ? signupErrors.loginId : undefined}>
                     <TextField
                       name="loginId"
                       value={signupValues.loginId}
                       onChange={(value) => updateSignup("loginId", value)}
-                      placeholder="Enter your login id"
-                      error={signupErrors.loginId}
+                      onBlur={() => markSignupTouched("loginId")}
+                      placeholder="Enter your name"
+                      error={(signupTouched.loginId || submitAttempted) ? signupErrors.loginId : undefined}
                       variant="signup"
                       autoComplete="username"
                       leftIcon={<UserIcon className="h-5 w-5" />}
@@ -310,13 +339,14 @@ export function AuthScreen({ mode }: AuthScreenProps) {
                 ) : null}
 
                 {mode === "signup" ? (
-                  <FieldShell label="Enter Email Id" error={signupErrors.email}>
+                  <FieldShell label="Enter Email Id" error={(signupTouched.email || submitAttempted) ? signupErrors.email : undefined}>
                     <TextField
                       name="email"
                       value={signupValues.email}
                       onChange={(value) => updateSignup("email", value)}
+                      onBlur={() => markSignupTouched("email")}
                       placeholder="Enter your email id"
-                      error={signupErrors.email}
+                      error={(signupTouched.email || submitAttempted) ? signupErrors.email : undefined}
                       variant="signup"
                       autoComplete="email"
                       inputMode="email"
@@ -325,14 +355,18 @@ export function AuthScreen({ mode }: AuthScreenProps) {
                   </FieldShell>
                 ) : null}
 
-                <FieldShell label={mode === "login" ? "Login ID" : "Enter Password"} error={mode === "login" ? loginErrors.loginId : signupErrors.password}>
+                <FieldShell
+                  label={mode === "login" ? "Login ID" : "Enter Password"}
+                  error={mode === "login" ? ((loginTouched.loginId || submitAttempted) ? loginErrors.loginId : undefined) : ((signupTouched.password || submitAttempted) ? signupErrors.password : undefined)}
+                >
                   {mode === "login" ? (
                     <TextField
                       name="loginId"
                       value={loginValues.loginId}
                       onChange={(value) => updateLogin("loginId", value)}
+                      onBlur={() => markLoginTouched("loginId")}
                       placeholder="Enter your login ID"
-                      error={loginErrors.loginId}
+                      error={(loginTouched.loginId || submitAttempted) ? loginErrors.loginId : undefined}
                       variant="login"
                       autoComplete="username"
                       leftIcon={<UserIcon className="h-5 w-5" />}
@@ -342,8 +376,9 @@ export function AuthScreen({ mode }: AuthScreenProps) {
                       name="password"
                       value={signupValues.password}
                       onChange={(value) => updateSignup("password", value)}
+                      onBlur={() => markSignupTouched("password")}
                       placeholder="Enter your password"
-                      error={signupErrors.password}
+                      error={(signupTouched.password || submitAttempted) ? signupErrors.password : undefined}
                       variant="signup"
                       autoComplete="new-password"
                       type={showPassword ? "text" : "password"}
@@ -363,13 +398,14 @@ export function AuthScreen({ mode }: AuthScreenProps) {
                 </FieldShell>
 
                 {mode === "login" ? (
-                  <FieldShell label="Password" error={loginErrors.password}>
+                  <FieldShell label="Password" error={(loginTouched.password || submitAttempted) ? loginErrors.password : undefined}>
                     <TextField
                       name="password"
                       value={loginValues.password}
                       onChange={(value) => updateLogin("password", value)}
+                      onBlur={() => markLoginTouched("password")}
                       placeholder="Enter your password"
-                      error={loginErrors.password}
+                      error={(loginTouched.password || submitAttempted) ? loginErrors.password : undefined}
                       variant="login"
                       autoComplete="current-password"
                       type={showPassword ? "text" : "password"}
@@ -389,13 +425,14 @@ export function AuthScreen({ mode }: AuthScreenProps) {
                 ) : null}
 
                 {mode === "signup" ? (
-                  <FieldShell label="Re-Enter Password" error={signupErrors.confirmPassword}>
+                  <FieldShell label="Confirm Password" error={(signupTouched.confirmPassword || submitAttempted) ? signupErrors.confirmPassword : undefined}>
                     <TextField
                       name="confirmPassword"
                       value={signupValues.confirmPassword}
                       onChange={(value) => updateSignup("confirmPassword", value)}
+                      onBlur={() => markSignupTouched("confirmPassword")}
                       placeholder="Re-enter your password"
-                      error={signupErrors.confirmPassword}
+                      error={(signupTouched.confirmPassword || submitAttempted) ? signupErrors.confirmPassword : undefined}
                       variant="signup"
                       autoComplete="new-password"
                       type={showConfirmPassword ? "text" : "password"}
