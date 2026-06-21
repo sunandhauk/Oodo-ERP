@@ -1,3 +1,4 @@
+/// <reference path="../types/pg.d.ts" />
 import { Inject, Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Pool, QueryResultRow } from 'pg';
 import { APP_CONFIG, AppConfig } from '../config/app.config';
@@ -373,8 +374,6 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     const user = await this.queryOne<{ id: string }>(
       `insert into app_users (tenant_id, login_id, email, password_hash, full_name, status)
        values ($1, $2, $3, $4, $5, 'active')
-       on conflict (tenant_id, login_id)
-       do update set password_hash = excluded.password_hash, email = excluded.email, full_name = excluded.full_name
        returning id`,
       [input.tenantId, input.loginId, input.email, input.passwordHash, input.fullName],
     );

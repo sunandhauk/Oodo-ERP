@@ -143,6 +143,10 @@ export class AuthService {
       throw new UnauthorizedException('User profile is unavailable.');
     }
 
+    if (profile.status !== 'active') {
+      throw new UnauthorizedException('User is inactive or missing.');
+    }
+
     const roleSet = new Set(profile.roles.map((role) => role.toLowerCase()));
     if (dto.portal === 'admin' && !roleSet.has('admin')) {
       throw new UnauthorizedException('Invalid Login Id or Password');

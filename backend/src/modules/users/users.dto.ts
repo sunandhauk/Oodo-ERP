@@ -1,4 +1,4 @@
-import { IsArray, IsEmail, IsOptional, IsString, Length, Matches, MinLength } from 'class-validator';
+import { IsArray, IsEmail, IsIn, IsOptional, IsString, Length, Matches, MinLength } from 'class-validator';
 
 export class CreateUserDto {
   @IsString()
@@ -27,4 +27,10 @@ export class SetUserRolesDto {
   @IsArray()
   @IsString({ each: true })
   roles!: string[];
+}
+
+export class SetUserStatusDto {
+  @IsString()
+  @IsIn(['active', 'inactive'])
+  status!: 'active' | 'inactive';
 }

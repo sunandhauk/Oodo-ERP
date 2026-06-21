@@ -23,7 +23,11 @@ import { FulfillmentModule } from './modules/fulfillment/fulfillment.module';
 import { FilesModule } from './modules/files/files.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { AuditModule } from './modules/audit/audit.module';
+import { SalesOrdersModule } from './modules/sales-orders/sales-orders.module';
+import { ManufacturingOrdersModule } from './modules/manufacturing-orders/manufacturing-orders.module';
+import { BillsOfMaterialsModule } from './modules/bills-of-materials/bills-of-materials.module';
 import { RequestStatusModule } from './modules/request-status/request-status.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -41,7 +45,11 @@ import { RequestStatusModule } from './modules/request-status/request-status.mod
     FilesModule,
     NotificationsModule,
     AuditModule,
+    SalesOrdersModule,
+    ManufacturingOrdersModule,
+    BillsOfMaterialsModule,
     RequestStatusModule,
+    DashboardModule,
   ],
   providers: [
     appConfigProvider,

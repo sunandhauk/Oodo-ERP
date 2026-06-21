@@ -28,15 +28,10 @@ const toInt = (value: string | undefined, fallback: number) => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
-const toBool = (value: string | undefined, fallback = false) => {
-  if (value === undefined) return fallback;
-  return ['1', 'true', 'yes', 'on'].includes(value.toLowerCase());
-};
-
 export const buildAppConfig = (): AppConfig => ({
   appName: process.env.APP_NAME || 'Oodo ERP',
   nodeEnv: process.env.NODE_ENV || 'development',
-  port: toInt(process.env.PORT, 3000),
+  port: toInt(process.env.PORT, 8000),
   defaultTenantId: process.env.DEFAULT_TENANT_ID || 'default',
   jwtSecret: process.env.JWT_SECRET || 'change-me',
   jwtTtlSeconds: toInt(process.env.JWT_TTL_SECONDS, 86400),
