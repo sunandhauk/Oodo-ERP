@@ -25,16 +25,30 @@ export class AppExceptionFilter implements ExceptionFilter {
             message: exception instanceof Error ? exception.message : 'Unexpected error',
           };
 
+    const responseMessage = (() => {
+      if (typeof responseBody === 'string') {
+        return responseBody;
+      }
+
+      const message = (responseBody as { message?: string | string[] }).message;
+      if (Array.isArray(message)) {
+        return message.filter(Boolean).join(' ');
+      }
+
+      if (typeof message === 'string' && message.trim()) {
+        return message;
+      }
+
+      return 'Request failed.';
+    })();
+
     const errorPayload = {
       status: RequestStatus.Failure,
       requestId,
       data: null,
       error: {
         code: exception instanceof HttpException ? `HTTP_${statusCode}` : 'INTERNAL_ERROR',
-        message:
-          typeof responseBody === 'string'
-            ? responseBody
-            : (responseBody as { message?: string }).message || 'Request failed.',
+        message: responseMessage,
         details: responseBody,
       },
       timestamp: new Date().toISOString(),

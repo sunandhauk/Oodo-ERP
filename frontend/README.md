@@ -6,7 +6,7 @@ Next.js frontend for the Oodo ERP auth flow.
 
 - Login page that matches the provided design
 - Sign Up page that matches the provided design
-- Mock JWT session flow using signed httpOnly cookies
+- Backend JWT session flow using signed httpOnly cookies
 - Protected dashboard placeholder after auth
 - Responsive layout for mobile and desktop
 
@@ -17,8 +17,7 @@ Next.js frontend for the Oodo ERP auth flow.
 
 ## Notes
 
-- There is no external backend yet.
+- Set `BACKEND_API_URL` to your NestJS backend base URL, for example `http://127.0.0.1:3001`.
 - The auth screens validate inputs on the client.
-- The app uses local Next.js route handlers to issue and clear a mock JWT session cookie.
-- If you want to change the signing secret later, set `MOCK_JWT_SECRET` in your environment.
+- The app uses local Next.js route handlers to proxy auth requests to the backend and store the returned JWT in a cookie.
 

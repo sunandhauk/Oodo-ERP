@@ -16,7 +16,7 @@ export class FulfillmentController {
   ) {}
 
   @Post('from-demand/:demandId')
-  @Permissions('fulfillment.manage')
+  @Permissions('manufacturing.production-entry')
   async createFromDemand(
     @Param('demandId') demandId: string,
     @Body() dto: CreateFulfillmentDto,

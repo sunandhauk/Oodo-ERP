@@ -9,5 +9,5 @@ export default async function LoginPage() {
     redirect("/dashboard");
   }
 
-  return <AuthScreen mode="login" />;
+  return <AuthScreen variant="admin-login" />;
 }

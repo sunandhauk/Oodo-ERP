@@ -5,6 +5,30 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        blue: {
+          50: "#effaf7",
+          100: "#d9f1ea",
+          200: "#b9e4d7",
+          300: "#88cfb8",
+          400: "#57b997",
+          500: "#2b9e7a",
+          600: "#1e8a68",
+          700: "#16684f",
+          800: "#0f4f3d",
+          900: "#0c3e31",
+        },
+        sky: {
+          50: "#effaf7",
+          100: "#d9f1ea",
+          200: "#b9e4d7",
+          300: "#88cfb8",
+          400: "#57b997",
+          500: "#2b9e7a",
+          600: "#1e8a68",
+          700: "#16684f",
+          800: "#0f4f3d",
+          900: "#0c3e31",
+        },
         brand: {
           50: "#effaf7",
           100: "#d9f1ea",
@@ -35,7 +59,14 @@ const config: Config = {
         button: "0 16px 30px rgba(31, 157, 122, 0.28)",
       },
       borderRadius: {
-        auth: "1rem",
+        DEFAULT: "0.25rem",
+        sm: "0.25rem",
+        md: "0.25rem",
+        lg: "0.25rem",
+        xl: "0.25rem",
+        "2xl": "0.25rem",
+        "3xl": "0.25rem",
+        auth: "0.25rem",
       },
     },
   },
@@ -43,4 +74,3 @@ const config: Config = {
 };
 
 export default config;
-

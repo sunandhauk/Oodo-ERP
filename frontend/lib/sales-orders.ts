@@ -1,6 +1,13 @@
 export const SALES_ORDERS_STORAGE_KEY = "oodo-erp.sales-orders.v2";
 
-export type SalesOrderStatus = "Draft" | "Confirmed" | "Partially Delivered" | "Pending" | "Delivered" | "Cancelled";
+export type SalesOrderStatus =
+  | "Draft"
+  | "Confirmed"
+  | "Partially Delivered"
+  | "Fully Delivered"
+  | "Pending"
+  | "Delivered"
+  | "Cancelled";
 
 export type SalesOrderLine = {
   product: string;
@@ -46,6 +53,8 @@ const sampleCustomers = [
   "Adani Enterprises",
 ];
 
+export const SALES_ORDER_CUSTOMERS = sampleCustomers;
+
 const sampleSalespeople = [
   "Ravi Jadeja",
   "Salman Sheikh",
@@ -61,12 +70,16 @@ const sampleStatuses: SalesOrderStatus[] = [
   "Pending",
   "Confirmed",
   "Pending",
-  "Delivered",
+  "Fully Delivered",
   "Confirmed",
   "Cancelled",
   "Pending",
   "Confirmed",
 ];
+
+function isDeliveredStatus(status: SalesOrderStatus) {
+  return status === "Partially Delivered" || status === "Delivered" || status === "Fully Delivered";
+}
 
 function padReference(index: number) {
   return `SO-${String(index).padStart(6, "0")}`;
@@ -111,7 +124,8 @@ export function createSampleSalesOrders(): SalesOrderRecord[] {
   return Array.from({ length: 120 }, (_, index) => {
     const line = buildSampleLine(index);
     const lines = [line];
-    const grandTotal = lines.reduce((sum, item) => sum + item.orderedQuantity * item.unitPrice, 0);
+    const status = sampleStatuses[index % sampleStatuses.length];
+    const grandTotal = calculateSalesOrderTotal(lines, status);
 
     return {
       id: `sales-order-${index + 1}`,
@@ -120,7 +134,7 @@ export function createSampleSalesOrders(): SalesOrderRecord[] {
       time: formatDisplayTime(index),
       customer: sampleCustomers[index % sampleCustomers.length],
       salesperson: sampleSalespeople[index % sampleSalespeople.length],
-      status: sampleStatuses[index % sampleStatuses.length],
+      status,
       address: `${index + 12}, ERP Avenue, Chennai`,
       lines,
       grandTotal,
@@ -133,34 +147,12 @@ function createStorageKey() {
 }
 
 export function loadSalesOrders(): SalesOrderRecord[] {
-  if (typeof window === "undefined") {
-    return createSampleSalesOrders();
-  }
-
-  try {
-    const raw = window.localStorage.getItem(createStorageKey());
-
-    if (!raw) {
-      return createSampleSalesOrders();
-    }
-
-    const parsed = JSON.parse(raw) as SalesOrderRecord[];
-    if (!Array.isArray(parsed) || parsed.length === 0) {
-      return createSampleSalesOrders();
-    }
-
-    return parsed;
-  } catch {
-    return createSampleSalesOrders();
-  }
+  void createStorageKey;
+  return [];
 }
 
 export function saveSalesOrders(orders: SalesOrderRecord[]) {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  window.localStorage.setItem(createStorageKey(), JSON.stringify(orders));
+  void orders;
 }
 
 export function formatSalesOrderDateTime(date: string, time: string) {
@@ -176,8 +168,13 @@ export function getNextSalesOrderReference(orders: SalesOrderRecord[]) {
   return padReference(highest + 1);
 }
 
-export function calculateSalesOrderTotal(lines: SalesOrderLine[]) {
-  return lines.reduce((sum, item) => sum + item.orderedQuantity * item.unitPrice, 0);
+export function calculateSalesOrderTotal(lines: SalesOrderLine[], status: SalesOrderStatus = "Draft") {
+  const useDeliveredQuantity = isDeliveredStatus(status);
+
+  return lines.reduce(
+    (sum, item) => sum + (useDeliveredQuantity ? item.deliveredQuantity : item.orderedQuantity) * item.unitPrice,
+    0,
+  );
 }
 
 export function createSalesOrderRecord(draft: SalesOrderDraft, existingOrders: SalesOrderRecord[]): SalesOrderRecord {
@@ -202,7 +199,7 @@ export function createSalesOrderRecord(draft: SalesOrderDraft, existingOrders: S
     status: draft.status,
     address: draft.address.trim(),
     lines: lines.map((line) => ({ ...line })),
-    grandTotal: calculateSalesOrderTotal(lines),
+    grandTotal: calculateSalesOrderTotal(lines, draft.status),
   };
 }
 

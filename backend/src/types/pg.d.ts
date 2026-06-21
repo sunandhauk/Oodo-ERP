@@ -3,25 +3,11 @@ declare module 'pg' {
     [column: string]: unknown;
   }
 
-  export interface PoolConfig {
-    connectionString?: string;
-    host?: string;
-    port?: number;
-    user?: string;
-    password?: string;
-    database?: string;
-    ssl?: boolean | { rejectUnauthorized?: boolean };
-  }
-
-  export interface QueryResult<T extends QueryResultRow = QueryResultRow> {
-    rows: T[];
-  }
-
   export class Pool {
-    constructor(config?: PoolConfig);
-    query<T extends QueryResultRow = QueryResultRow>(text: string, params?: unknown[]): Promise<QueryResult<T>>;
+    constructor(config?: unknown);
+    query<T extends QueryResultRow = QueryResultRow>(text: string, params?: unknown[]): Promise<{ rows: T[] }>;
     connect(): Promise<{
-      query<T extends QueryResultRow = QueryResultRow>(text: string, params?: unknown[]): Promise<QueryResult<T>>;
+      query<T extends QueryResultRow = QueryResultRow>(text: string, params?: unknown[]): Promise<{ rows: T[] }>;
       release(): void;
     }>;
     end(): Promise<void>;

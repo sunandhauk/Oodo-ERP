@@ -16,7 +16,7 @@ export class DemandController {
   ) {}
 
   @Get()
-  @Permissions('demand.manage')
+  @Permissions('sales.view')
   async list() {
     const tenantId = this.requestContext.getTenantId();
     const rows = await this.database.query(
@@ -36,7 +36,7 @@ export class DemandController {
   }
 
   @Post()
-  @Permissions('demand.manage')
+  @Permissions('sales.create')
   async create(@CurrentUser() user: { id: string } | null, @Body() dto: CreateDemandDto) {
     const tenantId = this.requestContext.getTenantId();
     const referenceNo = dto.referenceNo || `DEM-${Date.now()}`;
@@ -85,7 +85,7 @@ export class DemandController {
   }
 
   @Get(':id')
-  @Permissions('demand.manage')
+  @Permissions('sales.view')
   async getById(@Param('id') id: string) {
     const demand = await this.database.queryOne(
       `select * from app_demands where id = $1 limit 1`,
@@ -105,7 +105,7 @@ export class DemandController {
   }
 
   @Post(':id/approve')
-  @Permissions('demand.manage')
+  @Permissions('sales.approve')
   async approve(@Param('id') id: string, @CurrentUser() user: { id: string } | null) {
     const tenantId = this.requestContext.getTenantId();
     const current = await this.database.queryOne<{ status: string }>(

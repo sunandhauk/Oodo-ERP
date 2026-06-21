@@ -1,6 +1,5 @@
 export enum SystemRole {
   Admin = 'admin',
-  Manager = 'manager',
-  Operator = 'operator',
+  User = 'user',
   Viewer = 'viewer',
 }

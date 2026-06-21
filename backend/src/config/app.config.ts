@@ -12,6 +12,7 @@ export interface AppConfig {
   supabaseServiceRoleKey: string;
   supabaseStorageBucket: string;
   adminEmail: string;
+  adminLoginId: string;
   adminPassword: string;
   adminName: string;
   requestRateLimitWindowMs: number;
@@ -27,15 +28,10 @@ const toInt = (value: string | undefined, fallback: number) => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
-const toBool = (value: string | undefined, fallback = false) => {
-  if (value === undefined) return fallback;
-  return ['1', 'true', 'yes', 'on'].includes(value.toLowerCase());
-};
-
 export const buildAppConfig = (): AppConfig => ({
   appName: process.env.APP_NAME || 'Oodo ERP',
   nodeEnv: process.env.NODE_ENV || 'development',
-  port: toInt(process.env.PORT, 3000),
+  port: toInt(process.env.PORT, 8000),
   defaultTenantId: process.env.DEFAULT_TENANT_ID || 'default',
   jwtSecret: process.env.JWT_SECRET || 'change-me',
   jwtTtlSeconds: toInt(process.env.JWT_TTL_SECONDS, 86400),
@@ -44,6 +40,7 @@ export const buildAppConfig = (): AppConfig => ({
   supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
   supabaseStorageBucket: process.env.SUPABASE_STORAGE_BUCKET || 'erp-files',
   adminEmail: process.env.ADMIN_EMAIL || 'admin@oodo.local',
+  adminLoginId: process.env.ADMIN_LOGIN_ID || 'systemadmin',
   adminPassword: process.env.ADMIN_PASSWORD || 'ChangeMe123!',
   adminName: process.env.ADMIN_NAME || 'System Admin',
   requestRateLimitWindowMs: toInt(process.env.REQUEST_RATE_LIMIT_WINDOW_MS, 60000),

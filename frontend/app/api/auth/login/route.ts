@@ -1,9 +1,16 @@
 import { NextResponse } from "next/server";
-import { createSessionCookie, createSessionToken } from "@/lib/auth";
+import {
+  decodeSessionToken,
+  createSessionCookie,
+  mapBackendUserToSessionUser,
+  type BackendUserRecord,
+} from "@/lib/auth";
+import { getBackendApiBaseUrl, getBackendErrorMessage, readBackendEnvelope } from "@/lib/backend";
 
 type LoginBody = {
   loginId?: string;
   password?: string;
+  portal?: "admin" | "user";
 };
 
 export async function POST(request: Request) {
@@ -13,14 +20,39 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Login ID and password are required." }, { status: 400 });
   }
 
-  const { token, user } = createSessionToken({
-    loginId: body.loginId,
-    kind: "login",
-  });
+  try {
+    const response = await fetch(`${getBackendApiBaseUrl()}/api/auth/login`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        loginId: body.loginId.trim(),
+        password: body.password,
+        portal: body.portal,
+      }),
+      cache: "no-store",
+    });
 
-  const response = NextResponse.json({ user });
-  response.cookies.set(createSessionCookie(token));
+    const payload = await readBackendEnvelope<{ accessToken: string; user: BackendUserRecord }>(response);
+    if (!response.ok || payload.status !== "success" || !payload.data?.accessToken || !payload.data?.user) {
+      return NextResponse.json(
+        { error: getBackendErrorMessage(payload.error) },
+        { status: response.status >= 400 ? response.status : 401 },
+      );
+    }
 
-  return response;
+    const claims = decodeSessionToken(payload.data.accessToken);
+    if (!claims) {
+      return NextResponse.json({ error: "The backend returned an invalid session token." }, { status: 502 });
+    }
+
+    const user = mapBackendUserToSessionUser(payload.data.user, claims);
+    const nextResponse = NextResponse.json({ user });
+    nextResponse.cookies.set(createSessionCookie(payload.data.accessToken));
+
+    return nextResponse;
+  } catch {
+    return NextResponse.json({ error: "Auth backend is unavailable." }, { status: 503 });
+  }
 }
-

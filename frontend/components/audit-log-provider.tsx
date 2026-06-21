@@ -30,6 +30,10 @@ export function AuditLogProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    // Local audit history stays browser-only for now.
+  }, []);
+
+  useEffect(() => {
     if (!hydratedRef.current) {
       return;
     }

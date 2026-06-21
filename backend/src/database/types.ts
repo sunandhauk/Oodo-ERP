@@ -3,6 +3,7 @@ import { QueryResultRow } from 'pg';
 export interface AppUserRecord extends QueryResultRow {
   id: string;
   tenant_id: string;
+  login_id: string;
   email: string;
   full_name: string;
   status: string;

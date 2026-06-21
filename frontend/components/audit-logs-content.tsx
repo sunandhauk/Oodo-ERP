@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 import {
   CalendarIcon,
   ChevronDownIcon,
@@ -27,7 +28,7 @@ type FilterState = {
 
 const actionBadgeClass: Record<string, string> = {
   Created: "bg-emerald-50 text-emerald-700 ring-emerald-100",
-  Updated: "bg-blue-50 text-blue-700 ring-blue-100",
+  Updated: "bg-brand-50 text-brand-700 ring-brand-100",
   Deleted: "bg-rose-50 text-rose-700 ring-rose-100",
   Viewed: "bg-slate-100 text-slate-700 ring-slate-200",
   Opened: "bg-violet-50 text-violet-700 ring-violet-100",
@@ -52,7 +53,7 @@ function InfoCard({
   icon: ReactNode;
 }) {
   return (
-    <article className="rounded-[20px] border border-slate-200 bg-white p-4 shadow-[0_16px_38px_rgba(15,23,42,0.05)]">
+    <article className="rounded-[0.25rem] border border-slate-200 bg-white p-4 shadow-[0_16px_38px_rgba(15,23,42,0.05)]">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-[0.82rem] font-semibold uppercase tracking-[0.16em] text-slate-500">{title}</p>
@@ -228,19 +229,7 @@ export function AuditLogsContent() {
     <div className="space-y-4">
       <section className="flex flex-col gap-3 animate-fade-up">
         <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 text-sm font-semibold text-slate-500">
-              <span>Home</span>
-              <span className="text-slate-300">/</span>
-              <span className="text-slate-700">Audit Logs</span>
-            </div>
-            <h1 className="mt-2 text-[1.65rem] font-extrabold tracking-[-0.04em] text-slate-900 sm:text-[1.9rem]">
-              Audit Logs
-            </h1>
-            <p className="mt-1 text-[0.9rem] text-slate-500 sm:text-[0.95rem]">
-              Live activity trail for sign in, navigation, exports, and record changes.
-            </p>
-          </div>
+          <Breadcrumbs items={[{ label: "Home", href: "/dashboard" }, { label: "Audit Logs" }]} />
 
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -264,7 +253,7 @@ export function AuditLogsContent() {
       </section>
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
-        <InfoCard title="Total Logs" count={summary.total} caption="All time activity" accent="#eff6ff" icon={<ShieldIcon className="h-5 w-5 text-blue-600" />} />
+        <InfoCard title="Total Logs" count={summary.total} caption="All time activity" accent="#effaf7" icon={<ShieldIcon className="h-5 w-5 text-brand-600" />} />
         <InfoCard title="Auth Events" count={summary.auth} caption="Sign in / sign up / sign out" accent="#ecfdf5" icon={<UserIcon className="h-5 w-5 text-emerald-600" />} />
         <InfoCard title="Navigation" count={summary.navigation} caption="Page and menu views" accent="#f5f3ff" icon={<DashboardIcon className="h-5 w-5 text-violet-600" />} />
         <InfoCard title="Data Changes" count={summary.dataChanges} caption="Create, update, delete" accent="#fff7ed" icon={<ShieldIcon className="h-5 w-5 text-amber-600" />} />
@@ -272,7 +261,7 @@ export function AuditLogsContent() {
         <InfoCard title="Exports" count={summary.exports} caption="CSV downloads" accent="#ecfeff" icon={<CalendarIcon className="h-5 w-5 text-cyan-600" />} />
       </section>
 
-      <section className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-[0_16px_38px_rgba(15,23,42,0.05)] animate-fade-up" style={{ animationDelay: "80ms" }}>
+      <section className="rounded-[0.25rem] border border-slate-200 bg-white p-4 shadow-[0_16px_38px_rgba(15,23,42,0.05)] animate-fade-up" style={{ animationDelay: "80ms" }}>
         <div className="grid gap-3 xl:grid-cols-6">
           <div className="xl:col-span-2">
             <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Search</label>
@@ -366,7 +355,7 @@ export function AuditLogsContent() {
         </div>
       </section>
 
-      <section className="overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-[0_16px_38px_rgba(15,23,42,0.05)] animate-fade-up" style={{ animationDelay: "120ms" }}>
+      <section className="overflow-hidden rounded-[0.25rem] border border-slate-200 bg-white shadow-[0_16px_38px_rgba(15,23,42,0.05)] animate-fade-up" style={{ animationDelay: "120ms" }}>
         <div className="overflow-x-auto">
           <table className="min-w-[1180px] w-full border-separate border-spacing-0">
             <thead className="bg-slate-50/80">
@@ -490,3 +479,4 @@ export function AuditLogsContent() {
     </div>
   );
 }
+

@@ -117,7 +117,14 @@ export function BellIcon(props: SVGProps<SVGSVGElement>) {
     <svg {...iconDefaults(props)}>
       <path d="M8 18a4 4 0 0 0 8 0" />
       <path d="M6 16h12c-.7-.7-1.5-1.8-1.5-4.4V9a4.5 4.5 0 1 0-9 0v2.6C7.5 14.2 6.7 15.3 6 16Z" />
-      <circle cx="19" cy="5" r="2.2" fill="#ef4444" stroke="none" />
+    </svg>
+  );
+}
+
+export function NotificationsSharpIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false" {...props}>
+      <path d="M19 17V11c0-3.1-1.6-5.8-4.5-7V3h-5v1c-2.9 1.2-4.5 3.9-4.5 7v6L3 19v1h18v-1l-2-2Zm-7 5c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2Z" />
     </svg>
   );
 }

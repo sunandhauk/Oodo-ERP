@@ -23,7 +23,7 @@ async function bootstrap() {
     credentials: true,
   });
 
-  const port = Number(config.port || 3000);
+  const port = Number(config.port || 8000);
   await app.listen(port);
 }
 

@@ -9,5 +9,5 @@ export default async function SignupPage() {
     redirect("/dashboard");
   }
 
-  return <AuthScreen mode="signup" />;
+  return <AuthScreen variant="signup" />;
 }

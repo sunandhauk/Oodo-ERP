@@ -4,7 +4,7 @@
 
 :root {
   --background: #ffffff;
-  --foreground: #172031;
+  --foreground: #111827;
   --muted-foreground: #667085;
   --border-default: rgba(121, 154, 143, 0.34);
   --border-login: rgba(212, 214, 220, 1);
@@ -31,7 +31,7 @@ body {
   color: var(--foreground);
   background: transparent;
   overflow-x: hidden;
-  font-family: "Aptos", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  font-family: "Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }

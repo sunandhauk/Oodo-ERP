@@ -1,18 +1,27 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent, HTMLAttributes, ReactNode } from "react";
-import { BrandMark } from "@/components/brand-mark";
 import { useAuditLog } from "@/components/audit-log-provider";
-import { EyeToggleIcon, LockIcon, MailIcon, UserIcon } from "@/components/icons";
+import {
+  EyeToggleIcon,
+  LockIcon,
+  MailIcon,
+  UserIcon,
+} from "@/components/icons";
 import { authClient } from "@/lib/auth-client";
-import type { AuthMode, LoginFormValues, SignupFormValues } from "@/lib/auth-types";
+import type {
+  AuthScreenVariant,
+  LoginFormValues,
+  SignupFormValues,
+} from "@/lib/auth-types";
 import { validateLogin, validateSignup } from "@/lib/validators";
 
 type AuthScreenProps = {
-  mode: AuthMode;
+  variant: AuthScreenVariant;
 };
 
 type LoginState = LoginFormValues;
@@ -29,10 +38,15 @@ function FieldShell({
 }) {
   return (
     <div className="space-y-2">
-      <label className="block text-[0.94rem] font-semibold tracking-[-0.01em] text-ink-800 sm:text-[0.98rem]">{label}</label>
+      <label className="block text-[0.84rem] font-semibold tracking-[-0.01em] text-ink-800 sm:text-[0.98rem]">
+        {label}
+      </label>
       {children}
       {error ? (
-        <p className="mt-1 text-[0.78rem] font-medium text-red-500 sm:text-xs" role="alert">
+        <p
+          className="mt-1 text-[0.72rem] font-medium text-red-500 sm:text-xs"
+          role="alert"
+        >
           {error}
         </p>
       ) : null}
@@ -43,6 +57,7 @@ function FieldShell({
 function TextField({
   value,
   onChange,
+  onBlur,
   placeholder,
   type = "text",
   error,
@@ -55,6 +70,7 @@ function TextField({
 }: {
   value: string;
   onChange: (value: string) => void;
+  onBlur?: () => void;
   placeholder: string;
   type?: string;
   error?: string;
@@ -65,13 +81,17 @@ function TextField({
   inputMode?: HTMLAttributes<HTMLInputElement>["inputMode"];
   name: string;
 }) {
-  const borderClass = variant === "login" ? "border-[#d5d9de]" : "border-brand-200";
-  const focusClass = variant === "login" ? "focus-within:ring-2 focus-within:ring-brand-200/20" : "focus-within:ring-2 focus-within:ring-brand-200/30";
+  const borderClass =
+    variant === "login" ? "border-[#d5d9de]" : "border-brand-200";
+  const focusClass =
+    variant === "login"
+      ? "focus-within:ring-2 focus-within:ring-brand-200/20"
+      : "focus-within:ring-2 focus-within:ring-brand-200/30";
 
   return (
     <div
       className={[
-        "flex h-[3.55rem] items-center rounded-[14px] border bg-white px-3.5 shadow-[0_1px_0_rgba(15,23,42,0.03)] transition sm:h-[3.7rem] sm:px-4",
+        "flex h-[3.2rem] items-center rounded-[0.25rem] border bg-white px-3 transition sm:h-[3.7rem] sm:px-4",
         borderClass,
         focusClass,
         error ? "ring-2 ring-red-200/60" : "",
@@ -79,11 +99,16 @@ function TextField({
         .filter(Boolean)
         .join(" ")}
     >
-      <span className={variant === "login" ? "text-brand-600" : "text-brand-500"}>{leftIcon}</span>
+      <span
+        className={variant === "login" ? "text-brand-600" : "text-brand-500"}
+      >
+        {leftIcon}
+      </span>
       <input
         name={name}
         value={value}
         onChange={(event) => onChange(event.target.value)}
+        onBlur={onBlur}
         placeholder={placeholder}
         type={type}
         autoComplete={autoComplete}
@@ -95,14 +120,28 @@ function TextField({
   );
 }
 
-export function AuthScreen({ mode }: AuthScreenProps) {
+export function AuthScreen({ variant }: AuthScreenProps) {
   const router = useRouter();
   const { appendAuditLog } = useAuditLog();
-  const isLogin = mode === "login";
+  const isSignup = variant === "signup";
+  const isLogin = !isSignup;
+  const mode = isSignup ? "signup" : "login";
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [submitError, setSubmitError] = useState("");
+  const [loginTouched, setLoginTouched] = useState<
+    Partial<Record<keyof LoginState, boolean>>
+  >({});
+  const [signupTouched, setSignupTouched] = useState<
+    Partial<Record<keyof SignupState, boolean>>
+  >({});
+  const [loginErrors, setLoginErrors] = useState<
+    Partial<Record<keyof LoginState, string>>
+  >({});
+  const [signupErrors, setSignupErrors] = useState<
+    Partial<Record<keyof SignupState, string>>
+  >({});
   const [loginValues, setLoginValues] = useState<LoginState>({
     loginId: "",
     password: "",
@@ -113,61 +152,77 @@ export function AuthScreen({ mode }: AuthScreenProps) {
     password: "",
     confirmPassword: "",
   });
-  const [loginErrors, setLoginErrors] = useState<Partial<Record<keyof LoginState, string>>>({});
-  const [signupErrors, setSignupErrors] = useState<Partial<Record<keyof SignupState, string>>>({});
+  const [submitAttempted, setSubmitAttempted] = useState(false);
 
   useEffect(() => {
     appendAuditLog({
       user: "Guest",
       module: "Auth",
       recordType: "Page",
-      recordId: mode,
+      recordId: variant,
       action: "Viewed",
       fieldChanged: "Screen",
       oldValue: "-",
-      newValue: mode,
-      details: `Opened ${mode} page`,
+      newValue: variant,
+      details: `Opened ${variant} page`,
     });
-  }, [appendAuditLog, mode]);
+  }, [appendAuditLog, variant]);
 
   const copy = useMemo(() => {
-    if (mode === "login") {
+    if (variant === "admin-login") {
       return {
-        title: "Welcome Back",
-        subtitle: "Sign in to continue to your account",
         actionLabel: "SIGN IN",
         helperLabel: "Forgot Password?",
         linkLabel: "Sign Up",
         linkHref: "/signup",
+        switchLabel: "Login as User",
+        switchHref: "/user-login",
+      };
+    }
+
+    if (variant === "user-login") {
+      return {
+        actionLabel: "SIGN IN",
+        helperLabel: "Forgot Password?",
+        linkLabel: "Sign Up",
+        linkHref: "/signup",
+        switchLabel: "Login as System Administrator",
+        switchHref: "/login",
       };
     }
 
     return {
-      title: "Sign Up",
-      subtitle: "Create your account",
-      description: "Fill in the details below to get started",
       actionLabel: "SIGN UP",
       helperLabel: "Already have an account?",
-      linkLabel: "Log in",
-      linkHref: "/login",
+      linkLabel: "Login as User",
+      linkHref: "/user-login",
+      switchLabel: "Login as System Administrator",
+      switchHref: "/login",
     };
-  }, [mode]);
+  }, [variant]);
 
   function updateLogin(field: keyof LoginState, value: string) {
     setLoginValues((current) => ({ ...current, [field]: value }));
-    setLoginErrors((current) => ({ ...current, [field]: undefined }));
     setSubmitError("");
   }
 
   function updateSignup(field: keyof SignupState, value: string) {
     setSignupValues((current) => ({ ...current, [field]: value }));
-    setSignupErrors((current) => ({ ...current, [field]: undefined }));
     setSubmitError("");
+  }
+
+  function markLoginTouched(field: keyof LoginState) {
+    setLoginTouched((current) => ({ ...current, [field]: true }));
+  }
+
+  function markSignupTouched(field: keyof SignupState) {
+    setSignupTouched((current) => ({ ...current, [field]: true }));
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSubmitError("");
+    setSubmitAttempted(true);
 
     if (mode === "login") {
       const errors = validateLogin(loginValues);
@@ -180,7 +235,10 @@ export function AuthScreen({ mode }: AuthScreenProps) {
       setLoading(true);
 
       try {
-        const response = await authClient.login(loginValues);
+        const response = await authClient.login({
+          ...loginValues,
+          portal: variant === "admin-login" ? "admin" : "user",
+        });
         appendAuditLog({
           user: response.user.displayName,
           module: "Auth",
@@ -194,7 +252,11 @@ export function AuthScreen({ mode }: AuthScreenProps) {
         });
         router.replace("/dashboard");
       } catch (error) {
-        setSubmitError(error instanceof Error ? error.message : "Unable to sign in right now.");
+        setSubmitError(
+          error instanceof Error
+            ? error.message
+            : "Unable to sign in right now.",
+        );
       } finally {
         setLoading(false);
       }
@@ -206,6 +268,12 @@ export function AuthScreen({ mode }: AuthScreenProps) {
     setSignupErrors(errors);
 
     if (Object.keys(errors).length > 0) {
+      setSignupTouched({
+        loginId: true,
+        email: true,
+        password: true,
+        confirmPassword: true,
+      });
       return;
     }
 
@@ -226,32 +294,9 @@ export function AuthScreen({ mode }: AuthScreenProps) {
       });
       router.replace("/dashboard");
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : "Unable to sign up right now.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleDemoLogin() {
-    setLoading(true);
-    setSubmitError("");
-
-    try {
-      const response = await authClient.demoLogin();
-      appendAuditLog({
-        user: response.user.displayName,
-        module: "Auth",
-        recordType: "Session",
-        recordId: response.user.sub,
-        action: "Signed In",
-        fieldChanged: "Session status",
-        oldValue: "Signed out",
-        newValue: "Signed in",
-        details: "Demo login used from the auth page",
-      });
-      router.replace("/dashboard");
-    } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : "Unable to sign in right now.");
+      setSubmitError(
+        error instanceof Error ? error.message : "Unable to sign up right now.",
+      );
     } finally {
       setLoading(false);
     }
@@ -262,46 +307,47 @@ export function AuthScreen({ mode }: AuthScreenProps) {
       <section className="w-full max-w-[900px]">
         <div
           className={[
-            "mx-auto flex w-full flex-col rounded-[28px] border border-white/70 bg-white/95 px-5 py-5 shadow-[0_24px_64px_rgba(15,23,42,0.12)] backdrop-blur-sm sm:px-7 sm:py-6 animate-scale-in",
-            isLogin ? "max-w-[620px]" : "max-w-[720px]",
+            "mx-auto flex w-full flex-col rounded-[0.25rem] border border-slate-200 bg-white px-4 py-4 sm:px-7 sm:py-6",
+            isSignup ? "max-w-[720px]" : "max-w-[620px]",
           ].join(" ")}
         >
           <div className="flex w-full flex-col items-center justify-center">
-            <div className={["animate-float-soft", isLogin ? "h-[76px] w-[76px] sm:h-[84px] sm:w-[84px]" : "h-[88px] w-[88px] sm:h-[96px] sm:w-[96px]"].join(" ")}>
-              <BrandMark className="h-full w-full" />
-            </div>
+            <Image
+              src="/logo_icon.png"
+              alt="Brand logo"
+              width={200}
+              height={200}
+              sizes="(max-width: 768px) 200px, 200px"
+              priority
+              className="min-w-[200px] h-auto w-auto animate-fade-up object-contain"
+            />
 
-            <h1
-              className={[
-                "mt-4 text-center font-extrabold tracking-[-0.045em] animate-fade-up",
-                isLogin ? "text-[clamp(2rem,4vw,3rem)] leading-[0.96] text-ink-800" : "text-[clamp(2.25rem,4.7vw,3.6rem)] leading-[0.95] text-brand-700",
-              ].join(" ")}
+            <form
+              onSubmit={handleSubmit}
+              className={
+                (isLogin
+                  ? "mt-3 w-full max-w-[520px]"
+                  : "mt-4 w-full max-w-[620px]") + " animate-fade-up"
+              }
+              style={{ animationDelay: "120ms" }}
             >
-              {copy.title}
-            </h1>
-
-            <div className="mt-3 text-center animate-fade-up" style={{ animationDelay: "80ms" }}>
-              <p
-                className={[
-                  "font-medium leading-tight text-brand-600",
-                  isLogin ? "text-[clamp(0.98rem,1.9vw,1.25rem)]" : "text-[clamp(1.1rem,2.2vw,1.5rem)]",
-                ].join(" ")}
-              >
-                {copy.subtitle}
-              </p>
-              {"description" in copy ? <p className="mt-2 text-[0.96rem] leading-tight text-ink-500 sm:text-[1rem]">{copy.description}</p> : null}
-            </div>
-
-            <form onSubmit={handleSubmit} className={(isLogin ? "mt-6 w-full max-w-[520px]" : "mt-7 w-full max-w-[620px]") + " animate-fade-up"} style={{ animationDelay: "120ms" }}>
-              <div className={isLogin ? "space-y-4" : "space-y-5"}>
+              <div className={isLogin ? "space-y-2" : "space-y-3"}>
                 {mode === "signup" ? (
-                  <FieldShell label="Enter Login Id" error={signupErrors.loginId}>
+                  <FieldShell
+                    label="Enter Login Id"
+                    error={signupErrors.loginId}
+                  >
                     <TextField
                       name="loginId"
                       value={signupValues.loginId}
                       onChange={(value) => updateSignup("loginId", value)}
-                      placeholder="Enter your login id"
-                      error={signupErrors.loginId}
+                      onBlur={() => markSignupTouched("loginId")}
+                      placeholder="Enter your name"
+                      error={
+                        signupTouched.loginId || submitAttempted
+                          ? signupErrors.loginId
+                          : undefined
+                      }
                       variant="signup"
                       autoComplete="username"
                       leftIcon={<UserIcon className="h-5 w-5" />}
@@ -315,8 +361,13 @@ export function AuthScreen({ mode }: AuthScreenProps) {
                       name="email"
                       value={signupValues.email}
                       onChange={(value) => updateSignup("email", value)}
+                      onBlur={() => markSignupTouched("email")}
                       placeholder="Enter your email id"
-                      error={signupErrors.email}
+                      error={
+                        signupTouched.email || submitAttempted
+                          ? signupErrors.email
+                          : undefined
+                      }
                       variant="signup"
                       autoComplete="email"
                       inputMode="email"
@@ -325,14 +376,26 @@ export function AuthScreen({ mode }: AuthScreenProps) {
                   </FieldShell>
                 ) : null}
 
-                <FieldShell label={mode === "login" ? "Login ID" : "Enter Password"} error={mode === "login" ? loginErrors.loginId : signupErrors.password}>
+                <FieldShell
+                  label={mode === "login" ? "Login ID" : "Enter Password"}
+                  error={
+                    mode === "login"
+                      ? loginErrors.loginId
+                      : signupErrors.password
+                  }
+                >
                   {mode === "login" ? (
                     <TextField
                       name="loginId"
                       value={loginValues.loginId}
                       onChange={(value) => updateLogin("loginId", value)}
+                      onBlur={() => markLoginTouched("loginId")}
                       placeholder="Enter your login ID"
-                      error={loginErrors.loginId}
+                      error={
+                        loginTouched.loginId || submitAttempted
+                          ? loginErrors.loginId
+                          : undefined
+                      }
                       variant="login"
                       autoComplete="username"
                       leftIcon={<UserIcon className="h-5 w-5" />}
@@ -342,8 +405,13 @@ export function AuthScreen({ mode }: AuthScreenProps) {
                       name="password"
                       value={signupValues.password}
                       onChange={(value) => updateSignup("password", value)}
+                      onBlur={() => markSignupTouched("password")}
                       placeholder="Enter your password"
-                      error={signupErrors.password}
+                      error={
+                        signupTouched.password || submitAttempted
+                          ? signupErrors.password
+                          : undefined
+                      }
                       variant="signup"
                       autoComplete="new-password"
                       type={showPassword ? "text" : "password"}
@@ -352,8 +420,10 @@ export function AuthScreen({ mode }: AuthScreenProps) {
                         <button
                           type="button"
                           onClick={() => setShowPassword((value) => !value)}
-                          className="text-brand-700/90 transition hover:text-brand-800"
-                          aria-label={showPassword ? "Hide password" : "Show password"}
+                          className="rounded-[0.25rem] px-1.5 py-1 text-brand-700/90 transition hover:text-brand-800"
+                          aria-label={
+                            showPassword ? "Hide password" : "Show password"
+                          }
                         >
                           <EyeToggleIcon open={showPassword} />
                         </button>
@@ -368,8 +438,13 @@ export function AuthScreen({ mode }: AuthScreenProps) {
                       name="password"
                       value={loginValues.password}
                       onChange={(value) => updateLogin("password", value)}
+                      onBlur={() => markLoginTouched("password")}
                       placeholder="Enter your password"
-                      error={loginErrors.password}
+                      error={
+                        loginTouched.password || submitAttempted
+                          ? loginErrors.password
+                          : undefined
+                      }
                       variant="login"
                       autoComplete="current-password"
                       type={showPassword ? "text" : "password"}
@@ -378,8 +453,10 @@ export function AuthScreen({ mode }: AuthScreenProps) {
                         <button
                           type="button"
                           onClick={() => setShowPassword((value) => !value)}
-                          className="text-ink-400 transition hover:text-ink-600"
-                          aria-label={showPassword ? "Hide password" : "Show password"}
+                          className="rounded-[0.25rem] px-1.5 py-1 text-ink-400 transition hover:text-ink-600"
+                          aria-label={
+                            showPassword ? "Hide password" : "Show password"
+                          }
                         >
                           <EyeToggleIcon open={showPassword} />
                         </button>
@@ -389,13 +466,23 @@ export function AuthScreen({ mode }: AuthScreenProps) {
                 ) : null}
 
                 {mode === "signup" ? (
-                  <FieldShell label="Re-Enter Password" error={signupErrors.confirmPassword}>
+                  <FieldShell
+                    label="Re-Enter Password"
+                    error={signupErrors.confirmPassword}
+                  >
                     <TextField
                       name="confirmPassword"
                       value={signupValues.confirmPassword}
-                      onChange={(value) => updateSignup("confirmPassword", value)}
+                      onChange={(value) =>
+                        updateSignup("confirmPassword", value)
+                      }
+                      onBlur={() => markSignupTouched("confirmPassword")}
                       placeholder="Re-enter your password"
-                      error={signupErrors.confirmPassword}
+                      error={
+                        signupTouched.confirmPassword || submitAttempted
+                          ? signupErrors.confirmPassword
+                          : undefined
+                      }
                       variant="signup"
                       autoComplete="new-password"
                       type={showConfirmPassword ? "text" : "password"}
@@ -403,9 +490,15 @@ export function AuthScreen({ mode }: AuthScreenProps) {
                       rightSlot={
                         <button
                           type="button"
-                          onClick={() => setShowConfirmPassword((value) => !value)}
-                          className="text-brand-700/90 transition hover:text-brand-800"
-                          aria-label={showConfirmPassword ? "Hide confirmation password" : "Show confirmation password"}
+                          onClick={() =>
+                            setShowConfirmPassword((value) => !value)
+                          }
+                          className="rounded-[0.25rem] px-1.5 py-1 text-brand-700/90 transition hover:text-brand-800"
+                          aria-label={
+                            showConfirmPassword
+                              ? "Hide confirmation password"
+                              : "Show confirmation password"
+                          }
                         >
                           <EyeToggleIcon open={showConfirmPassword} />
                         </button>
@@ -416,7 +509,10 @@ export function AuthScreen({ mode }: AuthScreenProps) {
               </div>
 
               {submitError ? (
-                <p className="mt-4 rounded-[12px] border border-red-200 bg-red-50 px-3 py-2.5 text-xs font-medium text-red-600 sm:text-sm" role="alert">
+                <p
+                  className="mt-4 rounded-[0.25rem] border border-red-200 bg-red-50 px-3 py-2.5 text-xs font-medium text-red-600 sm:text-sm"
+                  role="alert"
+                >
                   {submitError}
                 </p>
               ) : null}
@@ -425,53 +521,59 @@ export function AuthScreen({ mode }: AuthScreenProps) {
                 type="submit"
                 disabled={loading}
                 className={[
-                  "flex h-[3.5rem] w-full items-center justify-center rounded-[14px] bg-[linear-gradient(135deg,#43af91_0%,#239b79_52%,#178765_100%)] text-[0.98rem] font-extrabold tracking-[0.04em] text-white shadow-button transition duration-200 hover:brightness-105 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-70 sm:h-[3.7rem]",
-                  isLogin ? "mt-5" : "mt-6",
+                  "flex h-[3.15rem] w-full items-center justify-center rounded-[0.25rem] border border-brand-600 bg-brand-600 text-[0.9rem] font-semibold tracking-[0.02em] text-white transition duration-150 hover:bg-brand-700 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-70 sm:h-[3.7rem] sm:text-[0.98rem]",
+                  isLogin ? "mt-4" : "mt-5",
                 ].join(" ")}
               >
                 {loading ? "PLEASE WAIT..." : copy.actionLabel}
               </button>
 
-              <div className={["flex flex-wrap items-center justify-center gap-2 text-center text-[0.95rem] sm:text-[1rem]", isLogin ? "mt-4" : "mt-5"].join(" ")}>
-                {mode === "login" ? (
+              <div
+                className={[
+                  "flex flex-wrap items-center justify-center gap-2 text-center text-[0.84rem] sm:text-[1rem]",
+                  isLogin ? "mt-3" : "mt-4",
+                ].join(" ")}
+              >
+                {isLogin ? (
                   <>
-                    <button type="button" className="text-ink-700 transition hover:text-ink-900 active:scale-[0.98]" onClick={() => void 0}>
+                    <Link
+                      href="/forgot-password"
+                      className="text-ink-700 transition hover:text-ink-900 active:scale-[0.98]"
+                    >
                       {copy.helperLabel}
-                    </button>
+                    </Link>
                     <span className="text-ink-400">|</span>
-                    <Link href={copy.linkHref} className="font-semibold text-brand-600 transition hover:text-brand-700">
+                    <Link
+                      href={copy.linkHref}
+                      className="font-semibold text-brand-600 transition hover:text-brand-700"
+                    >
                       {copy.linkLabel}
                     </Link>
                   </>
                 ) : (
                   <>
                     <span className="text-ink-700">{copy.helperLabel}</span>
-                    <Link href={copy.linkHref} className="font-semibold text-brand-600 transition hover:text-brand-700">
+                    <Link
+                      href={copy.linkHref}
+                      className="font-semibold text-brand-600 transition hover:text-brand-700"
+                    >
                       {copy.linkLabel}
                     </Link>
                   </>
                 )}
               </div>
 
-              <div className={["flex items-center gap-4 text-ink-300 sm:gap-5", isLogin ? "mt-4" : "mt-5"].join(" ")}>
-                <div className="h-px flex-1 bg-gradient-to-r from-transparent via-brand-200 to-transparent" />
-                <span className="text-[0.92rem] uppercase tracking-[0.18em] text-ink-400 sm:text-[1rem]">OR</span>
-                <div className="h-px flex-1 bg-gradient-to-r from-transparent via-brand-200 to-transparent" />
-              </div>
-
-              <button
-                type="button"
-                onClick={handleDemoLogin}
-                disabled={loading}
+              <Link
+                href={copy.switchHref}
                 className={[
-                  "mt-4 flex w-full items-center justify-center gap-3 rounded-[16px] px-4 py-2.5 text-[0.98rem] font-semibold text-brand-700 transition hover:bg-brand-50 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-70 sm:mt-5 sm:py-3",
+                  "mt-4 flex w-full items-center justify-center gap-3 rounded-[0.25rem] border border-slate-200 px-4 py-2.5 text-[0.86rem] font-semibold text-brand-700 transition hover:bg-slate-50 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-70 sm:mt-5 sm:py-3 sm:text-[0.98rem]",
                 ].join(" ")}
               >
-                <span className="flex h-11 w-11 items-center justify-center rounded-full bg-brand-50 text-brand-700">
-                  <UserIcon className="h-6 w-6" />
+                <span className="flex h-10 w-10 items-center justify-center rounded-[0.25rem] bg-brand-50 text-brand-700 sm:h-11 sm:w-11">
+                  <UserIcon className="h-5 w-5 sm:h-6 sm:w-6" />
                 </span>
-                <span>{mode === "login" ? "Login as User" : "Login as User"}</span>
-              </button>
+                <span>{copy.switchLabel}</span>
+              </Link>
             </form>
           </div>
         </div>
