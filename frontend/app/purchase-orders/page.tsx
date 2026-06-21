@@ -12,7 +12,7 @@ export default async function PurchaseOrdersPage() {
 
   return (
     <DashboardShell user={session}>
-      <PurchaseOrdersContent />
+      <PurchaseOrdersContent isAdmin={session.roles.includes("admin")} canCreate={session.permissions.includes("purchase.create")} />
     </DashboardShell>
   );
 }

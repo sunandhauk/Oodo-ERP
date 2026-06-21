@@ -10,6 +10,10 @@ export default async function BomsCreatePage() {
     redirect("/login");
   }
 
+  if (!session.permissions.includes("manufacturing.create")) {
+    redirect("/bills-of-materials");
+  }
+
   return (
     <DashboardShell user={session}>
       <BomCreateContent />

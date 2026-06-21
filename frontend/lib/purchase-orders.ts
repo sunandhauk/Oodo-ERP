@@ -1,6 +1,13 @@
 export const PURCHASE_ORDERS_STORAGE_KEY = "oodo-erp.purchase-orders.v1";
 
-export type PurchaseOrderStatus = "Draft" | "Confirmed" | "Received" | "Pending" | "Cancelled";
+export type PurchaseOrderStatus =
+  | "Draft"
+  | "Confirmed"
+  | "Partially Received"
+  | "Fully Received"
+  | "Cancelled"
+  | "Pending"
+  | "Received";
 
 export type PurchaseOrderLine = {
   product: string;
@@ -58,10 +65,10 @@ const sampleStatuses: PurchaseOrderStatus[] = [
   "Confirmed",
   "Draft",
   "Pending",
-  "Received",
+  "Partially Received",
+  "Fully Received",
   "Confirmed",
   "Pending",
-  "Received",
   "Cancelled",
   "Confirmed",
   "Pending",
@@ -131,34 +138,12 @@ function createStorageKey() {
 }
 
 export function loadPurchaseOrders(): PurchaseOrderRecord[] {
-  if (typeof window === "undefined") {
-    return createSamplePurchaseOrders();
-  }
-
-  try {
-    const raw = window.localStorage.getItem(createStorageKey());
-
-    if (!raw) {
-      return createSamplePurchaseOrders();
-    }
-
-    const parsed = JSON.parse(raw) as PurchaseOrderRecord[];
-    if (!Array.isArray(parsed) || parsed.length === 0) {
-      return createSamplePurchaseOrders();
-    }
-
-    return parsed;
-  } catch {
-    return createSamplePurchaseOrders();
-  }
+  void createStorageKey;
+  return [];
 }
 
 export function savePurchaseOrders(orders: PurchaseOrderRecord[]) {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  window.localStorage.setItem(createStorageKey(), JSON.stringify(orders));
+  void orders;
 }
 
 export function getNextPurchaseOrderReference(orders: PurchaseOrderRecord[]) {

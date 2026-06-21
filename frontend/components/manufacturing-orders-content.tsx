@@ -2,10 +2,13 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 import { useAuditLog } from "@/components/audit-log-provider";
 import { ChevronDownIcon, SearchIcon } from "@/components/icons";
+import { useProducts } from "@/components/products-store";
 import { useManufacturingOrders } from "@/components/manufacturing-orders-store";
+import type { SessionUser } from "@/lib/auth-types";
 import type {
   ManufacturingComponentLine,
   ManufacturingOrderDraft,
@@ -14,6 +17,8 @@ import type {
   ManufacturingWorkOrderLine,
 } from "@/lib/manufacturing-orders";
 import { calculateManufacturingOrderTotal, getNextManufacturingOrderReference } from "@/lib/manufacturing-orders";
+import { buildListPath } from "@/lib/list-filters";
+import type { BomRecord } from "@/lib/bom";
 
 function Badge({ status }: { status: ManufacturingOrderStatus }) {
   const className =
@@ -42,7 +47,7 @@ function SectionCard({
   children: ReactNode;
   className?: string;
 }) {
-  return <section className={`rounded-[24px] border border-slate-200 bg-white shadow-[0_16px_38px_rgba(15,23,42,0.05)] ${className}`}>{children}</section>;
+  return <section className={`rounded-[0.25rem] border border-slate-200 bg-white shadow-[0_16px_38px_rgba(15,23,42,0.05)] ${className}`}>{children}</section>;
 }
 
 function SearchToolbarIcon() {
@@ -81,6 +86,11 @@ function GridToolbarIcon() {
   );
 }
 
+type ManufacturingOrdersContentProps = {
+  isAdmin?: boolean;
+  canCreate?: boolean;
+};
+
 function formatDisplayTimestamp(order: ManufacturingOrderRecord) {
   return (
     <div>
@@ -105,22 +115,109 @@ function makeDefaultWorkOrder(): ManufacturingWorkOrderLine {
     operation: "",
     assignee: "",
     plannedHours: 1,
+    realHours: 0,
     status: "Pending",
   };
 }
 
-export function ManufacturingOrdersContent() {
+type UserLookup = {
+  id: string;
+  login_id: string;
+  full_name: string;
+  email: string;
+  status: string;
+};
+
+function formatMinutes(value: number) {
+  return Number.isFinite(value) ? value.toFixed(2) : "0.00";
+}
+
+function normalizeBoms(payload: BomRecord[] | undefined) {
+  return Array.isArray(payload) ? payload : [];
+}
+
+function isFinalManufacturingStatus(status: ManufacturingOrderStatus) {
+  return status === "Done" || status === "Cancelled";
+}
+
+function isEditableManufacturingStatus(status: ManufacturingOrderStatus) {
+  return status === "Draft" || status === "Confirmed" || status === "In Progress";
+}
+
+function scaleValue(baseValue: number, baseQuantity: number, nextQuantity: number) {
+  if (baseQuantity <= 0) {
+    return baseValue;
+  }
+
+  return Number(((baseValue * nextQuantity) / baseQuantity).toFixed(3));
+}
+
+function normalizeManufacturingComponentLine(
+  line: ManufacturingComponentLine,
+  products: Array<{ product: string; costPrice: number; freeToUseQty?: number }>,
+) {
+  const matchedProduct = products.find((product) => product.product === line.component);
+  const toConsumeUnits = Number.isFinite(line.toConsumeUnits) ? line.toConsumeUnits : 0;
+  const resolvedAvailability =
+    matchedProduct && (matchedProduct.freeToUseQty ?? 0) >= toConsumeUnits ? "Available" : line.availability || "Available";
+
+  return {
+    ...line,
+    availability: resolvedAvailability,
+    unitCost: matchedProduct ? matchedProduct.costPrice : Number.isFinite(line.unitCost) ? line.unitCost : 0,
+  };
+}
+
+function buildBomComponentLines(
+  bom: BomRecord,
+  quantity: number,
+  products: Array<{ product: string; costPrice: number; freeToUseQty?: number }>,
+) {
+  const nextQuantity = Number.isFinite(quantity) ? quantity : 0;
+  return bom.components.length > 0
+    ? bom.components.map((component) =>
+        normalizeManufacturingComponentLine(
+          {
+            component: component.component,
+            availability: component.availability,
+            toConsumeUnits: scaleValue(component.toConsumeUnits, bom.quantity || 1, nextQuantity || bom.quantity || 1),
+            consumeUnits: 0,
+            unitCost: 0,
+          },
+          products,
+        ),
+      )
+    : [makeDefaultComponent()];
+}
+
+function buildBomWorkOrderLines(bom: BomRecord, quantity: number) {
+  const nextQuantity = Number.isFinite(quantity) ? quantity : 0;
+  return bom.workOrders.length > 0
+    ? bom.workOrders.map((workOrder) => ({
+        operation: workOrder.operation,
+        assignee: workOrder.assignee,
+        plannedHours: scaleValue(workOrder.plannedHours, bom.quantity || 1, nextQuantity || bom.quantity || 1),
+        realHours: 0,
+        status: workOrder.status,
+      }))
+    : [makeDefaultWorkOrder()];
+}
+
+export function ManufacturingOrdersContent({ isAdmin = false, canCreate = false }: ManufacturingOrdersContentProps) {
+  void isAdmin;
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { appendAuditLog } = useAuditLog();
   const { orders } = useManufacturingOrders();
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"table" | "cards">("table");
-  const [query, setQuery] = useState("");
-  const [status, setStatus] = useState<string>("All Status");
   const [page, setPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(10);
+  const query = searchParams.get("q") ?? "";
+  const status = searchParams.get("status") ?? "All Status";
 
   useEffect(() => {
     if (searchOpen) {
@@ -176,6 +273,20 @@ export function ManufacturingOrdersContent() {
     });
   }
 
+  function updateQuery(nextQuery: string) {
+    router.replace(buildListPath(pathname, searchParams, { q: nextQuery }), { scroll: false });
+  }
+
+  function updateStatus(nextStatus: string) {
+    router.replace(buildListPath(pathname, searchParams, { status: nextStatus }), { scroll: false });
+  }
+
+  function clearFilters() {
+    router.replace(buildListPath(pathname, searchParams, { q: "", status: "All Status" }), { scroll: false });
+    setSearchOpen(false);
+    setFilterOpen(false);
+  }
+
   const filteredOrders = useMemo(() => {
     const q = query.trim().toLowerCase();
 
@@ -223,24 +334,18 @@ export function ManufacturingOrdersContent() {
   return (
     <div className="space-y-4">
       <section className="flex flex-wrap items-end justify-between gap-4 animate-fade-up">
-        <div>
-          <div className="flex items-center gap-2 text-sm font-semibold text-slate-500">
-            <span>Home</span>
-            <span className="text-slate-300">/</span>
-            <span className="text-blue-600">Manufacturing Orders</span>
-          </div>
-          <h1 className="mt-2 text-[1.65rem] font-extrabold tracking-[-0.04em] text-slate-900 sm:text-[1.9rem]">Manufacturing Order List</h1>
-          <p className="mt-1 text-[0.9rem] text-slate-500 sm:text-[0.95rem]">Browse, filter, and manage manufacturing orders.</p>
-        </div>
+        <Breadcrumbs items={[{ label: "Home", href: "/dashboard" }, { label: "Manufacturing Orders" }]} />
 
-        <button
-          type="button"
-          onClick={() => router.push("/manufacturing-orders/new")}
-          className="inline-flex items-center gap-2 rounded-2xl bg-brand-600 px-4 py-3 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(31,158,122,0.2)] transition hover:bg-brand-700"
-        >
-          <span className="text-lg leading-none">+</span>
-          New
-        </button>
+        {canCreate ? (
+          <button
+            type="button"
+            onClick={() => router.push("/manufacturing-orders/new")}
+            className="inline-flex items-center gap-2 rounded-2xl bg-brand-600 px-4 py-3 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(31,158,122,0.2)] transition hover:bg-brand-700"
+          >
+            <span className="text-lg leading-none">+</span>
+            New
+          </button>
+        ) : null}
       </section>
 
       <SectionCard>
@@ -321,7 +426,7 @@ export function ManufacturingOrdersContent() {
                     <input
                       ref={searchInputRef}
                       value={query}
-                      onChange={(event) => setQuery(event.target.value)}
+                      onChange={(event) => updateQuery(event.target.value)}
                       placeholder="Search by reference, product, assignee..."
                       className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-12 pr-4 text-sm font-medium text-slate-800 outline-none transition focus:border-slate-300 focus:bg-white"
                     />
@@ -336,7 +441,7 @@ export function ManufacturingOrdersContent() {
                     <div className="relative">
                       <select
                         value={status}
-                        onChange={(event) => setStatus(event.target.value)}
+                        onChange={(event) => updateStatus(event.target.value)}
                         className="h-12 w-full appearance-none rounded-2xl border border-slate-200 bg-slate-50 px-4 pr-10 text-sm font-medium text-slate-800 outline-none transition focus:border-slate-300 focus:bg-white"
                       >
                         {["All Status", "Confirmed", "Draft", "In Progress", "Done", "Cancelled"].map((value) => (
@@ -351,9 +456,7 @@ export function ManufacturingOrdersContent() {
                     <button
                       type="button"
                       onClick={() => {
-                        setQuery("");
-                        setStatus("All Status");
-                        setSearchOpen(false);
+                        clearFilters();
                       }}
                       className="flex h-12 w-full items-center justify-center rounded-2xl border border-slate-200 bg-white text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
                     >
@@ -427,7 +530,7 @@ export function ManufacturingOrdersContent() {
                         details: `Opened ${order.reference} from card view`,
                       });
                     }}
-                    className="rounded-[20px] border border-slate-200 bg-white p-4 text-left shadow-[0_10px_24px_rgba(15,23,42,0.04)] transition hover:-translate-y-0.5 hover:shadow-[0_18px_38px_rgba(15,23,42,0.08)]"
+                    className="rounded-[0.25rem] border border-slate-200 bg-white p-4 text-left shadow-[0_10px_24px_rgba(15,23,42,0.04)] transition hover:-translate-y-0.5 hover:shadow-[0_18px_38px_rgba(15,23,42,0.08)]"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>
@@ -481,12 +584,19 @@ export function ManufacturingOrdersContent() {
   );
 }
 
-export function ManufacturingOrderCreateContent() {
+export function ManufacturingOrderCreateContent({ user }: { user: SessionUser }) {
   const router = useRouter();
   const { appendAuditLog } = useAuditLog();
   const { orders, createOrder } = useManufacturingOrders();
+  const { products } = useProducts();
   const nextReference = useMemo(() => getNextManufacturingOrderReference(orders), [orders]);
+  const creationTimestamp = useMemo(() => new Date(), []);
   const [activeTab, setActiveTab] = useState<"components" | "work-orders">("components");
+  const [users, setUsers] = useState<UserLookup[]>([]);
+  const [boms, setBoms] = useState<BomRecord[]>([]);
+  const [loadingLookups, setLoadingLookups] = useState(true);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [saving, setSaving] = useState(false);
   const [draft, setDraft] = useState<ManufacturingOrderDraft>({
     finishedProduct: "",
     assignee: "",
@@ -498,12 +608,163 @@ export function ManufacturingOrderCreateContent() {
     components: [makeDefaultComponent()],
     workOrders: [makeDefaultWorkOrder()],
   });
-  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadLookups() {
+      try {
+        const [userResponse, bomResponse] = await Promise.all([
+          fetch("/api/users/lookup", { cache: "no-store" }),
+          fetch("/api/bills-of-materials", { cache: "no-store" }),
+        ]);
+
+        const userPayload = (await userResponse.json().catch(() => null)) as { status?: string; data?: UserLookup[] } | null;
+        const bomPayload = (await bomResponse.json().catch(() => null)) as { status?: string; data?: BomRecord[] } | null;
+
+        if (!active) {
+          return;
+        }
+
+        if (userResponse.ok && userPayload?.status === "success" && Array.isArray(userPayload.data)) {
+          setUsers(userPayload.data);
+        }
+
+        if (bomResponse.ok && bomPayload?.status === "success" && Array.isArray(bomPayload.data)) {
+          setBoms(normalizeBoms(bomPayload.data));
+        }
+      } finally {
+        if (active) {
+          setLoadingLookups(false);
+        }
+      }
+    }
+
+    void loadLookups();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const activeUsers = useMemo(() => users.filter((item) => item.status.toLowerCase() === "active"), [users]);
+
+  const filteredBoms = useMemo(() => {
+    if (!draft.finishedProduct) {
+      return boms;
+    }
+
+    return boms.filter((bom) => bom.finishedProduct === draft.finishedProduct);
+  }, [boms, draft.finishedProduct]);
+
+  const selectedProduct = useMemo(() => products.find((product) => product.product === draft.finishedProduct) ?? null, [draft.finishedProduct, products]);
+  const selectedBom = useMemo(() => filteredBoms.find((bom) => bom.reference === draft.billOfMaterial) ?? null, [draft.billOfMaterial, filteredBoms]);
+  const isDraft = draft.status === "Draft";
+  const isConfirmed = draft.status === "Confirmed";
+  const isFinalized = draft.status === "Done" || draft.status === "Cancelled";
+  const canEditOrderFields = !isFinalized && !isConfirmed;
+  const canEditWorkOrderLines = !isFinalized && (draft.status === "Draft" || draft.status === "Confirmed" || draft.status === "In Progress");
+  const showConsumedQuantity = !isDraft;
+  const showRealDuration = !isDraft;
+  const totalCost = useMemo(
+    () =>
+      draft.components.reduce((sum, component) => {
+        const quantity = component.consumeUnits > 0 ? component.consumeUnits : component.toConsumeUnits;
+        return sum + quantity * component.unitCost;
+      }, 0),
+    [draft.components],
+  );
+  const creationDateLabel = new Intl.DateTimeFormat("en-US", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(creationTimestamp);
+  const creationTimeLabel = new Intl.DateTimeFormat("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(creationTimestamp);
+  const actorLabel = user.displayName || user.email || "User";
+
+  function refreshComponents(components: ManufacturingComponentLine[]) {
+    return components.map((component) => normalizeManufacturingComponentLine(component, products));
+  }
+
+  function rebuildFromBom(bom: BomRecord, quantity: number) {
+    return {
+      billOfMaterial: bom.reference,
+      components: buildBomComponentLines(bom, quantity, products),
+      workOrders: buildBomWorkOrderLines(bom, quantity),
+    };
+  }
+
+  function updateFinishedProduct(nextProduct: string) {
+    const product = products.find((item) => item.product === nextProduct) ?? null;
+    const productBoms = nextProduct ? boms.filter((bom) => bom.finishedProduct === nextProduct) : [];
+    const preferredBom = product?.bomReference ? productBoms.find((bom) => bom.reference === product.bomReference) ?? null : null;
+    const nextBom = preferredBom ?? productBoms[0] ?? null;
+
+    setDraft((current) => {
+      const nextDraft: ManufacturingOrderDraft = {
+        ...current,
+        finishedProduct: nextProduct,
+      };
+
+      if (nextBom) {
+        const hydrated = rebuildFromBom(nextBom, current.quantity);
+        nextDraft.billOfMaterial = hydrated.billOfMaterial;
+        nextDraft.components = hydrated.components;
+        nextDraft.workOrders = hydrated.workOrders;
+      } else {
+        nextDraft.billOfMaterial = "";
+        nextDraft.components = [makeDefaultComponent()];
+        nextDraft.workOrders = [makeDefaultWorkOrder()];
+      }
+
+      return nextDraft;
+    });
+  }
+
+  function updateBillOfMaterial(nextReference: string) {
+    const nextBom = filteredBoms.find((bom) => bom.reference === nextReference) ?? null;
+
+    setDraft((current) => {
+      const nextDraft: ManufacturingOrderDraft = {
+        ...current,
+        billOfMaterial: nextReference,
+      };
+
+      if (nextBom) {
+        const hydrated = rebuildFromBom(nextBom, current.quantity);
+        nextDraft.components = hydrated.components;
+        nextDraft.workOrders = hydrated.workOrders;
+      } else {
+        nextDraft.components = [makeDefaultComponent()];
+        nextDraft.workOrders = [makeDefaultWorkOrder()];
+      }
+
+      return nextDraft;
+    });
+  }
+
+  function updateQuantity(nextQuantity: number) {
+    setDraft((current) => {
+      const nextDraft = { ...current, quantity: nextQuantity };
+      const nextBom = filteredBoms.find((bom) => bom.reference === current.billOfMaterial) ?? null;
+
+      if (nextBom) {
+        const hydrated = rebuildFromBom(nextBom, nextQuantity);
+        nextDraft.components = hydrated.components;
+        nextDraft.workOrders = hydrated.workOrders;
+      }
+
+      return nextDraft;
+    });
+  }
 
   function updateComponent(index: number, patch: Partial<ManufacturingComponentLine>) {
     setDraft((current) => ({
       ...current,
-      components: current.components.map((component, componentIndex) => (componentIndex === index ? { ...component, ...patch } : component)),
+      components: refreshComponents(current.components.map((component, componentIndex) => (componentIndex === index ? { ...component, ...patch } : component))),
     }));
   }
 
@@ -536,13 +797,39 @@ export function ManufacturingOrderCreateContent() {
     }));
   }
 
-  function submit(status: ManufacturingOrderStatus) {
+  function setStatus(nextStatus: ManufacturingOrderStatus) {
+    setDraft((current) => ({ ...current, status: nextStatus }));
+    appendAuditLog({
+      user: actorLabel,
+      module: "Manufacturing Orders",
+      recordType: "Manufacturing Order",
+      recordId: nextReference,
+      action: "Updated",
+      fieldChanged: "Status",
+      oldValue: draft.status,
+      newValue: nextStatus,
+      details: `Changed manufacturing order ${nextReference} status to ${nextStatus}`,
+    });
+  }
+
+  async function submit(status: ManufacturingOrderStatus) {
+    if (!draft.finishedProduct.trim()) {
+      setErrorMessage("Please select a finished product.");
+      return;
+    }
+
     setSaving(true);
+    setErrorMessage("");
 
     try {
-      const nextOrder = createOrder({ ...draft, status });
+      const nextOrder = await createOrder({
+        ...draft,
+        status,
+        components: refreshComponents(draft.components),
+        workOrders: draft.workOrders.map((workOrder) => ({ ...workOrder, realHours: workOrder.realHours ?? 0 })),
+      });
       appendAuditLog({
-        user: "Admin",
+        user: actorLabel,
         module: "Manufacturing Orders",
         recordType: "Manufacturing Order",
         recordId: nextOrder.reference,
@@ -553,81 +840,150 @@ export function ManufacturingOrderCreateContent() {
         details: `Created manufacturing order ${nextOrder.reference}`,
       });
       router.replace("/manufacturing-orders");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to create manufacturing order.";
+      setErrorMessage(message);
     } finally {
       setSaving(false);
     }
   }
 
-  const totalCost = calculateManufacturingOrderTotal(draft.components);
-
   return (
     <div className="space-y-4">
       <section className="flex flex-wrap items-start justify-between gap-4 animate-fade-up">
         <div>
-          <div className="flex items-center gap-2 text-sm font-semibold text-slate-500">
-            <span>Manufacturing Orders</span>
-            <span className="text-slate-300">/</span>
-            <span className="text-blue-600">Create</span>
-          </div>
+          <Breadcrumbs items={[{ label: "Home", href: "/dashboard" }, { label: "Manufacturing Orders", href: "/manufacturing-orders" }, { label: "Create" }]} />
           <h1 className="mt-2 text-[1.65rem] font-extrabold tracking-[-0.04em] text-slate-900 sm:text-[1.9rem]">Manufacturing Order - Create</h1>
+          <p className="mt-1 text-sm text-slate-500">Select a product, hydrate the BoM, and save the order as Draft, Confirmed, or Done.</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <button type="button" onClick={() => router.push("/audit-logs")} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
-            Logs
-          </button>
-          <button type="button" onClick={() => router.push("/manufacturing-orders")} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
-            Cancel
-          </button>
-          <button type="button" disabled={saving} onClick={() => submit("Confirmed")} className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-70">
-            Confirm
-          </button>
-          <button type="button" disabled={saving} onClick={() => submit("In Progress")} className="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70">
-            Produce
-          </button>
-          <button type="button" disabled={saving} onClick={() => submit("Done")} className="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-70">
-            Start
-          </button>
-          <button type="button" onClick={() => router.push("/manufacturing-orders")} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
+          <button type="button" onClick={() => router.push("/manufacturing-orders")} className="rounded-[0.25rem] border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
             Back
+          </button>
+          {isDraft ? (
+            <button type="button" onClick={() => setStatus("Confirmed")} className="rounded-[0.25rem] border border-sky-200 bg-sky-50 px-4 py-2.5 text-sm font-semibold text-sky-700 transition hover:bg-sky-100">
+              Confirm
+            </button>
+          ) : null}
+          {!isFinalized ? (
+            <button type="button" onClick={() => setStatus("Done")} className="rounded-[0.25rem] border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100">
+              Produce
+            </button>
+          ) : null}
+          {!isFinalized ? (
+            <button type="button" onClick={() => setStatus("Cancelled")} className="rounded-[0.25rem] border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-semibold text-rose-700 transition hover:bg-rose-100">
+              Cancel
+            </button>
+          ) : null}
+          <button
+            type="button"
+            disabled={saving}
+            onClick={() => submit(draft.status)}
+            className="rounded-[0.25rem] bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-70"
+          >
+            {saving ? "Saving..." : "Save Manufacturing Order"}
           </button>
         </div>
       </section>
+
+      {errorMessage ? <div className="rounded-[0.25rem] border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">{errorMessage}</div> : null}
 
       <section className="grid gap-4 xl:grid-cols-[1fr_240px]">
         <SectionCard className="overflow-hidden">
           <div className="flex items-center justify-between border-b border-slate-100 px-4 py-4">
             <div className="text-[0.98rem] font-extrabold tracking-[-0.03em] text-slate-900">Manufacturing Order Details</div>
-            <div className="rounded-full bg-blue-50 px-3 py-1 text-sm font-semibold text-blue-700">Status: Draft</div>
+            <div className="rounded-full bg-blue-50 px-3 py-1 text-sm font-semibold text-blue-700">Status: {draft.status}</div>
           </div>
 
           <div className="grid gap-4 p-4 md:grid-cols-2">
             <div className="space-y-2">
               <label className="block text-sm font-semibold text-slate-600">MO Number</label>
-              <input value={nextReference} readOnly className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 outline-none" />
+              <input value={nextReference} readOnly className="h-11 w-full rounded-[0.25rem] border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 outline-none" />
+            </div>
+            <div className="space-y-2">
+              <label className="block text-sm font-semibold text-slate-600">Creation Date</label>
+              <input value={creationDateLabel} readOnly className="h-11 w-full rounded-[0.25rem] border border-slate-200 bg-slate-100 px-4 text-sm font-semibold text-slate-900 outline-none" />
+            </div>
+            <div className="space-y-2">
+              <label className="block text-sm font-semibold text-slate-600">Creation Time</label>
+              <input value={creationTimeLabel} readOnly className="h-11 w-full rounded-[0.25rem] border border-slate-200 bg-slate-100 px-4 text-sm font-semibold text-slate-900 outline-none" />
             </div>
             <div className="space-y-2">
               <label className="block text-sm font-semibold text-slate-600">Schedule Date</label>
-              <input type="date" value={draft.scheduleDate} onChange={(event) => setDraft((current) => ({ ...current, scheduleDate: event.target.value }))} className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 outline-none" />
+              <input
+                type="date"
+                value={draft.scheduleDate}
+                onChange={(event) => setDraft((current) => ({ ...current, scheduleDate: event.target.value }))}
+                readOnly={isFinalized}
+                className="h-11 w-full rounded-[0.25rem] border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 outline-none disabled:bg-slate-100"
+              />
             </div>
             <div className="space-y-2">
               <label className="block text-sm font-semibold text-slate-600">Finished Product</label>
-              <input value={draft.finishedProduct} onChange={(event) => setDraft((current) => ({ ...current, finishedProduct: event.target.value }))} placeholder="Select Finished Product" className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 outline-none" />
+              <select
+                value={draft.finishedProduct}
+                onChange={(event) => updateFinishedProduct(event.target.value)}
+                disabled={loadingLookups || !canEditOrderFields}
+                className="h-11 w-full appearance-none rounded-[0.25rem] border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 outline-none disabled:bg-slate-100"
+              >
+                <option value="">{loadingLookups ? "Loading products..." : "Select Finished Product"}</option>
+                {products.map((product) => (
+                  <option key={product.id} value={product.product}>
+                    {product.product}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="space-y-2">
               <label className="block text-sm font-semibold text-slate-600">Assignee</label>
-              <input value={draft.assignee} onChange={(event) => setDraft((current) => ({ ...current, assignee: event.target.value }))} placeholder="Select Assignee" className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 outline-none" />
+              <select
+                value={draft.assignee}
+                onChange={(event) => setDraft((current) => ({ ...current, assignee: event.target.value }))}
+                disabled={loadingLookups || isFinalized}
+                className="h-11 w-full appearance-none rounded-[0.25rem] border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 outline-none disabled:bg-slate-100"
+              >
+                <option value="">{loadingLookups ? "Loading users..." : "Select Assignee"}</option>
+                {activeUsers.map((item) => (
+                  <option key={item.id} value={item.full_name || item.login_id}>
+                    {item.full_name || item.login_id}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="space-y-2">
               <label className="block text-sm font-semibold text-slate-600">Quantity</label>
-              <div className="flex overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
-                <input type="number" min="0" value={draft.quantity} onChange={(event) => setDraft((current) => ({ ...current, quantity: Number(event.target.value) }))} className="h-11 min-w-0 flex-1 bg-transparent px-4 text-sm font-semibold text-slate-900 outline-none" />
+              <div className="flex overflow-hidden rounded-[0.25rem] border border-slate-200 bg-slate-50">
+                <input
+                  type="number"
+                  min="0"
+                  value={draft.quantity}
+                  onChange={(event) => updateQuantity(Number(event.target.value))}
+                  readOnly={isFinalized}
+                  className="h-11 min-w-0 flex-1 bg-transparent px-4 text-sm font-semibold text-slate-900 outline-none"
+                />
                 <div className="flex items-center border-l border-slate-200 px-4 text-sm font-semibold text-slate-500">{draft.unit}</div>
               </div>
             </div>
             <div className="space-y-2">
               <label className="block text-sm font-semibold text-slate-600">Bill of Material</label>
-              <input value={draft.billOfMaterial} onChange={(event) => setDraft((current) => ({ ...current, billOfMaterial: event.target.value }))} placeholder="Select Bill of Material" className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 outline-none" />
+              <select
+                value={draft.billOfMaterial}
+                onChange={(event) => updateBillOfMaterial(event.target.value)}
+                disabled={loadingLookups || !draft.finishedProduct || !canEditOrderFields}
+                className="h-11 w-full appearance-none rounded-[0.25rem] border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 outline-none disabled:bg-slate-100"
+              >
+                <option value="">{draft.finishedProduct ? "Select BoM" : "Select finished product first"}</option>
+                {filteredBoms.map((bom) => (
+                  <option key={bom.id} value={bom.reference}>
+                    {bom.reference} - {bom.finishedProduct}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-2 md:col-span-2">
+              <label className="block text-sm font-semibold text-slate-600">Selected Product</label>
+              <input value={selectedProduct?.product || ""} readOnly className="h-11 w-full rounded-[0.25rem] border border-slate-200 bg-slate-100 px-4 text-sm font-semibold text-slate-900 outline-none" />
             </div>
           </div>
         </SectionCard>
@@ -645,6 +1001,14 @@ export function ManufacturingOrderCreateContent() {
                 <span className="font-semibold text-slate-900">{draft.workOrders.length}</span>
               </div>
               <div className="flex items-center justify-between">
+                <span>BoM</span>
+                <span className="font-semibold text-slate-900">{draft.billOfMaterial || "None"}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>Resolved BoM</span>
+                <span className="font-semibold text-slate-900">{selectedBom?.reference || "None"}</span>
+              </div>
+              <div className="flex items-center justify-between">
                 <span>Total</span>
                 <span className="font-semibold text-slate-900">Rs. {totalCost.toLocaleString("en-IN")}</span>
               </div>
@@ -659,11 +1023,11 @@ export function ManufacturingOrderCreateContent() {
 
       <SectionCard>
         <div className="border-b border-slate-100 px-4 pt-4">
-          <div className="grid grid-cols-2 gap-2 rounded-2xl bg-slate-100 p-1">
-            <button type="button" onClick={() => setActiveTab("components")} className={["rounded-xl px-4 py-2 text-sm font-semibold transition", activeTab === "components" ? "bg-slate-900 text-white shadow-sm" : "text-slate-600 hover:bg-white/70"].join(" ")}>
+          <div className="grid grid-cols-2 gap-2 rounded-[0.25rem] bg-slate-100 p-1">
+            <button type="button" onClick={() => setActiveTab("components")} className={["rounded-[0.25rem] px-4 py-2 text-sm font-semibold transition", activeTab === "components" ? "bg-slate-900 text-white shadow-sm" : "text-slate-600 hover:bg-white/70"].join(" ")}>
               Components
             </button>
-            <button type="button" onClick={() => setActiveTab("work-orders")} className={["rounded-xl px-4 py-2 text-sm font-semibold transition", activeTab === "work-orders" ? "bg-slate-900 text-white shadow-sm" : "text-slate-600 hover:bg-white/70"].join(" ")}>
+            <button type="button" onClick={() => setActiveTab("work-orders")} className={["rounded-[0.25rem] px-4 py-2 text-sm font-semibold transition", activeTab === "work-orders" ? "bg-slate-900 text-white shadow-sm" : "text-slate-600 hover:bg-white/70"].join(" ")}>
               Work Orders
             </button>
           </div>
@@ -672,10 +1036,10 @@ export function ManufacturingOrderCreateContent() {
         <div className="overflow-x-auto">
           {activeTab === "components" ? (
             <>
-              <table className="min-w-[1080px] w-full border-separate border-spacing-0">
+              <table className="min-w-[1120px] w-full border-separate border-spacing-0">
                 <thead className="bg-slate-50/80">
                   <tr className="text-left text-[0.78rem] font-bold uppercase tracking-[0.14em] text-slate-500">
-                    {["#", "Components", "Availability", "To Consume Units", "Consume Units", "Unit Cost", "Total", ""].map((column) => (
+                    {["#", "Components", "Availability", "To Consume Units", ...(showConsumedQuantity ? ["Consumed Quantity"] : []), "Unit Cost", "Total", ""].map((column) => (
                       <th key={column} className="border-b border-slate-200 px-4 py-3.5">
                         {column}
                       </th>
@@ -684,28 +1048,63 @@ export function ManufacturingOrderCreateContent() {
                 </thead>
                 <tbody>
                   {draft.components.map((component, index) => {
-                    const lineTotal = component.consumeUnits * component.unitCost;
+                    const lineTotal = (component.consumeUnits > 0 ? component.consumeUnits : component.toConsumeUnits) * component.unitCost;
                     return (
                       <tr key={index} className={index % 2 === 0 ? "bg-white" : "bg-slate-50/40"}>
                         <td className="border-b border-slate-100 px-4 py-4 text-sm font-semibold text-slate-700">{index + 1}</td>
                         <td className="border-b border-slate-100 px-4 py-4">
-                          <input value={component.component} onChange={(event) => updateComponent(index, { component: event.target.value })} placeholder="Component name" className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 outline-none" />
+                          <select
+                            value={component.component}
+                            onChange={(event) => updateComponent(index, { component: event.target.value })}
+                            disabled={isFinalized}
+                            className="h-11 w-full appearance-none rounded-[0.25rem] border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 outline-none disabled:bg-slate-100"
+                          >
+                            <option value="">Select product</option>
+                            {products.map((product) => (
+                              <option key={product.id} value={product.product}>
+                                {product.product}
+                              </option>
+                            ))}
+                          </select>
                         </td>
                         <td className="border-b border-slate-100 px-4 py-4">
-                          <input value={component.availability} onChange={(event) => updateComponent(index, { availability: event.target.value })} className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 outline-none" />
+                          <input value={component.availability} readOnly className="h-11 w-full rounded-[0.25rem] border border-slate-200 bg-slate-100 px-4 text-sm font-semibold text-slate-900 outline-none" />
                         </td>
                         <td className="border-b border-slate-100 px-4 py-4">
-                          <input type="number" min="0" value={component.toConsumeUnits} onChange={(event) => updateComponent(index, { toConsumeUnits: Number(event.target.value) })} className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 outline-none" />
+                          <input
+                            type="number"
+                            min="0"
+                            value={component.toConsumeUnits}
+                            onChange={(event) => updateComponent(index, { toConsumeUnits: Number(event.target.value) })}
+                            readOnly={isFinalized}
+                            className="h-11 w-full rounded-[0.25rem] border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 outline-none disabled:bg-slate-100"
+                          />
                         </td>
+                        {showConsumedQuantity ? (
+                          <td className="border-b border-slate-100 px-4 py-4">
+                            <input
+                              type="number"
+                              min="0"
+                              value={component.consumeUnits}
+                              onChange={(event) => updateComponent(index, { consumeUnits: Number(event.target.value) })}
+                              readOnly={isFinalized || draft.status !== "Confirmed" && draft.status !== "In Progress"}
+                              className="h-11 w-full rounded-[0.25rem] border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 outline-none disabled:bg-slate-100"
+                            />
+                          </td>
+                        ) : null}
                         <td className="border-b border-slate-100 px-4 py-4">
-                          <input type="number" min="0" value={component.consumeUnits} onChange={(event) => updateComponent(index, { consumeUnits: Number(event.target.value) })} className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 outline-none" />
-                        </td>
-                        <td className="border-b border-slate-100 px-4 py-4">
-                          <input type="number" min="0" value={component.unitCost} onChange={(event) => updateComponent(index, { unitCost: Number(event.target.value) })} className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 outline-none" />
+                          <input
+                            type="number"
+                            min="0"
+                            value={component.unitCost}
+                            onChange={(event) => updateComponent(index, { unitCost: Number(event.target.value) })}
+                            readOnly={isFinalized}
+                            className="h-11 w-full rounded-[0.25rem] border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 outline-none disabled:bg-slate-100"
+                          />
                         </td>
                         <td className="border-b border-slate-100 px-4 py-4 text-sm font-semibold text-slate-900">Rs. {lineTotal.toLocaleString("en-IN")}</td>
                         <td className="border-b border-slate-100 px-4 py-4 text-right">
-                          <button type="button" onClick={() => removeComponent(index)} disabled={draft.components.length === 1} className="rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">
+                          <button type="button" onClick={() => removeComponent(index)} disabled={isFinalized || draft.components.length === 1} className="rounded-[0.25rem] border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">
                             Remove
                           </button>
                         </td>
@@ -716,7 +1115,7 @@ export function ManufacturingOrderCreateContent() {
               </table>
 
               <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-4 py-4">
-                <button type="button" onClick={addComponent} className="rounded-xl border border-blue-200 bg-white px-4 py-2.5 text-sm font-semibold text-blue-700 transition hover:bg-blue-50">
+                <button type="button" onClick={addComponent} disabled={isFinalized} className="rounded-[0.25rem] border border-blue-200 bg-white px-4 py-2.5 text-sm font-semibold text-blue-700 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50">
                   + Add Component
                 </button>
                 <div className="text-sm font-semibold text-slate-700">
@@ -726,10 +1125,10 @@ export function ManufacturingOrderCreateContent() {
             </>
           ) : (
             <>
-              <table className="min-w-[1080px] w-full border-separate border-spacing-0">
+              <table className="min-w-[1120px] w-full border-separate border-spacing-0">
                 <thead className="bg-slate-50/80">
                   <tr className="text-left text-[0.78rem] font-bold uppercase tracking-[0.14em] text-slate-500">
-                    {["#", "Operation", "Assignee", "Planned Hours", "Status", ""].map((column) => (
+                    {["#", "Operation", "Work Center", "Expected Duration", ...(showRealDuration ? ["Real Duration"] : []), "Status", ""].map((column) => (
                       <th key={column} className="border-b border-slate-200 px-4 py-3.5">
                         {column}
                       </th>
@@ -741,23 +1140,65 @@ export function ManufacturingOrderCreateContent() {
                     <tr key={index} className={index % 2 === 0 ? "bg-white" : "bg-slate-50/40"}>
                       <td className="border-b border-slate-100 px-4 py-4 text-sm font-semibold text-slate-700">{index + 1}</td>
                       <td className="border-b border-slate-100 px-4 py-4">
-                        <input value={workOrder.operation} onChange={(event) => updateWorkOrder(index, { operation: event.target.value })} placeholder="Operation" className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 outline-none" />
+                        <input
+                          value={workOrder.operation}
+                          onChange={(event) => updateWorkOrder(index, { operation: event.target.value })}
+                          placeholder="Operation"
+                          readOnly={!canEditWorkOrderLines}
+                          className="h-11 w-full rounded-[0.25rem] border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 outline-none disabled:bg-slate-100"
+                        />
                       </td>
                       <td className="border-b border-slate-100 px-4 py-4">
-                        <input value={workOrder.assignee} onChange={(event) => updateWorkOrder(index, { assignee: event.target.value })} placeholder="Assignee" className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 outline-none" />
+                        <select
+                          value={workOrder.assignee}
+                          onChange={(event) => updateWorkOrder(index, { assignee: event.target.value })}
+                          disabled={!canEditWorkOrderLines}
+                          className="h-11 w-full appearance-none rounded-[0.25rem] border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 outline-none disabled:bg-slate-100"
+                        >
+                          <option value="">Select work center</option>
+                          {activeUsers.map((item) => (
+                            <option key={item.id} value={item.full_name || item.login_id}>
+                              {item.full_name || item.login_id}
+                            </option>
+                          ))}
+                        </select>
                       </td>
                       <td className="border-b border-slate-100 px-4 py-4">
-                        <input type="number" min="0" value={workOrder.plannedHours} onChange={(event) => updateWorkOrder(index, { plannedHours: Number(event.target.value) })} className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 outline-none" />
+                        <input
+                          type="number"
+                          min="0"
+                          value={workOrder.plannedHours}
+                          onChange={(event) => updateWorkOrder(index, { plannedHours: Number(event.target.value) })}
+                          readOnly={!canEditWorkOrderLines}
+                          className="h-11 w-full rounded-[0.25rem] border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 outline-none disabled:bg-slate-100"
+                        />
                       </td>
+                      {showRealDuration ? (
+                        <td className="border-b border-slate-100 px-4 py-4">
+                          <input
+                            type="number"
+                            min="0"
+                            value={workOrder.realHours}
+                            onChange={(event) => updateWorkOrder(index, { realHours: Number(event.target.value) })}
+                            readOnly={isFinalized || draft.status === "Draft"}
+                            className="h-11 w-full rounded-[0.25rem] border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 outline-none disabled:bg-slate-100"
+                          />
+                        </td>
+                      ) : null}
                       <td className="border-b border-slate-100 px-4 py-4">
-                        <select value={workOrder.status} onChange={(event) => updateWorkOrder(index, { status: event.target.value as ManufacturingWorkOrderLine["status"] })} className="h-11 w-full appearance-none rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 outline-none">
+                        <select
+                          value={workOrder.status}
+                          onChange={(event) => updateWorkOrder(index, { status: event.target.value as ManufacturingWorkOrderLine["status"] })}
+                          disabled={!canEditWorkOrderLines}
+                          className="h-11 w-full appearance-none rounded-[0.25rem] border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 outline-none disabled:bg-slate-100"
+                        >
                           {["Pending", "Ready", "In Progress", "Done"].map((value) => (
                             <option key={value}>{value}</option>
                           ))}
                         </select>
                       </td>
                       <td className="border-b border-slate-100 px-4 py-4 text-right">
-                        <button type="button" onClick={() => removeWorkOrder(index)} disabled={draft.workOrders.length === 1} className="rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">
+                        <button type="button" onClick={() => removeWorkOrder(index)} disabled={!canEditWorkOrderLines || draft.workOrders.length === 1} className="rounded-[0.25rem] border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50">
                           Remove
                         </button>
                       </td>
@@ -767,7 +1208,7 @@ export function ManufacturingOrderCreateContent() {
               </table>
 
               <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-4 py-4">
-                <button type="button" onClick={addWorkOrder} className="rounded-xl border border-blue-200 bg-white px-4 py-2.5 text-sm font-semibold text-blue-700 transition hover:bg-blue-50">
+                <button type="button" onClick={addWorkOrder} disabled={!canEditWorkOrderLines} className="rounded-[0.25rem] border border-blue-200 bg-white px-4 py-2.5 text-sm font-semibold text-blue-700 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50">
                   + Add Work Order
                 </button>
                 <div className="text-sm font-semibold text-slate-700">
@@ -781,3 +1222,4 @@ export function ManufacturingOrderCreateContent() {
     </div>
   );
 }
+

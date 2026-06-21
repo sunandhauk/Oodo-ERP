@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 import { DashboardShell } from "@/components/dashboard-shell";
 import { ProductsContent } from "@/components/products-content";
+import type { ProductRecord } from "@/lib/products";
+import { fetchServerBackendList } from "@/lib/server-backend";
 import { getServerSession } from "@/lib/session";
 
 export default async function ProductsPage() {
@@ -10,9 +12,11 @@ export default async function ProductsPage() {
     redirect("/login");
   }
 
+  const initialProducts = await fetchServerBackendList<ProductRecord>("/api/master-data/products");
+
   return (
     <DashboardShell user={session}>
-      <ProductsContent />
+      <ProductsContent initialProducts={initialProducts} canCreate={session.permissions.includes("product.create")} />
     </DashboardShell>
   );
 }

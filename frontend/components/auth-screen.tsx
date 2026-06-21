@@ -1,14 +1,23 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent, HTMLAttributes, ReactNode } from "react";
-import { BrandMark } from "@/components/brand-mark";
 import { useAuditLog } from "@/components/audit-log-provider";
-import { EyeToggleIcon, LockIcon, MailIcon, UserIcon } from "@/components/icons";
+import {
+  EyeToggleIcon,
+  LockIcon,
+  MailIcon,
+  UserIcon,
+} from "@/components/icons";
 import { authClient } from "@/lib/auth-client";
-import type { AuthScreenVariant, LoginFormValues, SignupFormValues } from "@/lib/auth-types";
+import type {
+  AuthScreenVariant,
+  LoginFormValues,
+  SignupFormValues,
+} from "@/lib/auth-types";
 import { validateLogin, validateSignup } from "@/lib/validators";
 
 type AuthScreenProps = {
@@ -29,10 +38,15 @@ function FieldShell({
 }) {
   return (
     <div className="space-y-2">
-      <label className="block text-[0.84rem] font-semibold tracking-[-0.01em] text-ink-800 sm:text-[0.98rem]">{label}</label>
+      <label className="block text-[0.84rem] font-semibold tracking-[-0.01em] text-ink-800 sm:text-[0.98rem]">
+        {label}
+      </label>
       {children}
       {error ? (
-        <p className="mt-1 text-[0.72rem] font-medium text-red-500 sm:text-xs" role="alert">
+        <p
+          className="mt-1 text-[0.72rem] font-medium text-red-500 sm:text-xs"
+          role="alert"
+        >
           {error}
         </p>
       ) : null}
@@ -67,13 +81,17 @@ function TextField({
   inputMode?: HTMLAttributes<HTMLInputElement>["inputMode"];
   name: string;
 }) {
-  const borderClass = variant === "login" ? "border-[#d5d9de]" : "border-brand-200";
-  const focusClass = variant === "login" ? "focus-within:ring-2 focus-within:ring-brand-200/20" : "focus-within:ring-2 focus-within:ring-brand-200/30";
+  const borderClass =
+    variant === "login" ? "border-[#d5d9de]" : "border-brand-200";
+  const focusClass =
+    variant === "login"
+      ? "focus-within:ring-2 focus-within:ring-brand-200/20"
+      : "focus-within:ring-2 focus-within:ring-brand-200/30";
 
   return (
     <div
       className={[
-        "flex h-[3.2rem] items-center rounded-[10px] border bg-white px-3 transition sm:h-[3.7rem] sm:px-4",
+        "flex h-[3.2rem] items-center rounded-[0.25rem] border bg-white px-3 transition sm:h-[3.7rem] sm:px-4",
         borderClass,
         focusClass,
         error ? "ring-2 ring-red-200/60" : "",
@@ -81,7 +99,11 @@ function TextField({
         .filter(Boolean)
         .join(" ")}
     >
-      <span className={variant === "login" ? "text-brand-600" : "text-brand-500"}>{leftIcon}</span>
+      <span
+        className={variant === "login" ? "text-brand-600" : "text-brand-500"}
+      >
+        {leftIcon}
+      </span>
       <input
         name={name}
         value={value}
@@ -103,12 +125,23 @@ export function AuthScreen({ variant }: AuthScreenProps) {
   const { appendAuditLog } = useAuditLog();
   const isSignup = variant === "signup";
   const isLogin = !isSignup;
+  const mode = isSignup ? "signup" : "login";
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [submitError, setSubmitError] = useState("");
-  const [loginTouched, setLoginTouched] = useState<Partial<Record<keyof LoginState, boolean>>>({});
-  const [signupTouched, setSignupTouched] = useState<Partial<Record<keyof SignupState, boolean>>>({});
+  const [loginTouched, setLoginTouched] = useState<
+    Partial<Record<keyof LoginState, boolean>>
+  >({});
+  const [signupTouched, setSignupTouched] = useState<
+    Partial<Record<keyof SignupState, boolean>>
+  >({});
+  const [loginErrors, setLoginErrors] = useState<
+    Partial<Record<keyof LoginState, string>>
+  >({});
+  const [signupErrors, setSignupErrors] = useState<
+    Partial<Record<keyof SignupState, string>>
+  >({});
   const [loginValues, setLoginValues] = useState<LoginState>({
     loginId: "",
     password: "",
@@ -133,12 +166,11 @@ export function AuthScreen({ variant }: AuthScreenProps) {
       newValue: variant,
       details: `Opened ${variant} page`,
     });
-  }, [appendAuditLog, mode]);
+  }, [appendAuditLog, variant]);
 
   const copy = useMemo(() => {
     if (variant === "admin-login") {
       return {
-        title: "Login",
         actionLabel: "SIGN IN",
         helperLabel: "Forgot Password?",
         linkLabel: "Sign Up",
@@ -150,7 +182,6 @@ export function AuthScreen({ variant }: AuthScreenProps) {
 
     if (variant === "user-login") {
       return {
-        title: "Login",
         actionLabel: "SIGN IN",
         helperLabel: "Forgot Password?",
         linkLabel: "Sign Up",
@@ -161,7 +192,6 @@ export function AuthScreen({ variant }: AuthScreenProps) {
     }
 
     return {
-      title: "Sign Up",
       actionLabel: "SIGN UP",
       helperLabel: "Already have an account?",
       linkLabel: "Login as User",
@@ -169,7 +199,7 @@ export function AuthScreen({ variant }: AuthScreenProps) {
       switchLabel: "Login as System Administrator",
       switchHref: "/login",
     };
-  }, [mode]);
+  }, [variant]);
 
   function updateLogin(field: keyof LoginState, value: string) {
     setLoginValues((current) => ({ ...current, [field]: value }));
@@ -222,7 +252,11 @@ export function AuthScreen({ variant }: AuthScreenProps) {
         });
         router.replace("/dashboard");
       } catch (error) {
-        setSubmitError(error instanceof Error ? error.message : "Unable to sign in right now.");
+        setSubmitError(
+          error instanceof Error
+            ? error.message
+            : "Unable to sign in right now.",
+        );
       } finally {
         setLoading(false);
       }
@@ -230,7 +264,10 @@ export function AuthScreen({ variant }: AuthScreenProps) {
       return;
     }
 
-    if (Object.keys(signupErrors).length > 0) {
+    const errors = validateSignup(signupValues);
+    setSignupErrors(errors);
+
+    if (Object.keys(errors).length > 0) {
       setSignupTouched({
         loginId: true,
         email: true,
@@ -257,7 +294,9 @@ export function AuthScreen({ variant }: AuthScreenProps) {
       });
       router.replace("/dashboard");
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : "Unable to sign up right now.");
+      setSubmitError(
+        error instanceof Error ? error.message : "Unable to sign up right now.",
+      );
     } finally {
       setLoading(false);
     }
@@ -268,47 +307,47 @@ export function AuthScreen({ variant }: AuthScreenProps) {
       <section className="w-full max-w-[900px]">
         <div
           className={[
-            "mx-auto flex w-full flex-col rounded-[12px] border border-slate-200 bg-white px-4 py-4 sm:px-7 sm:py-6",
+            "mx-auto flex w-full flex-col rounded-[0.25rem] border border-slate-200 bg-white px-4 py-4 sm:px-7 sm:py-6",
             isSignup ? "max-w-[720px]" : "max-w-[620px]",
           ].join(" ")}
         >
           <div className="flex w-full flex-col items-center justify-center">
-            <div className={isSignup ? "h-[72px] w-[72px] sm:h-[96px] sm:w-[96px]" : "h-[64px] w-[64px] sm:h-[84px] sm:w-[84px]"}>
-              <BrandMark className="h-full w-full" />
-            </div>
+            <Image
+              src="/logo_icon.png"
+              alt="Brand logo"
+              width={200}
+              height={200}
+              sizes="(max-width: 768px) 200px, 200px"
+              priority
+              className="min-w-[200px] h-auto w-auto animate-fade-up object-contain"
+            />
 
-            <h1
-              className={[
-                "mt-4 text-center font-extrabold tracking-[-0.045em] animate-fade-up",
-                isLogin ? "text-[clamp(2rem,4vw,3rem)] leading-[0.96] text-ink-800" : "text-[clamp(2.25rem,4.7vw,3.6rem)] leading-[0.95] text-brand-700",
-              ].join(" ")}
+            <form
+              onSubmit={handleSubmit}
+              className={
+                (isLogin
+                  ? "mt-3 w-full max-w-[520px]"
+                  : "mt-4 w-full max-w-[620px]") + " animate-fade-up"
+              }
+              style={{ animationDelay: "120ms" }}
             >
-              {copy.title}
-            </h1>
-
-            <div className="mt-3 text-center animate-fade-up" style={{ animationDelay: "80ms" }}>
-              <p
-                className={[
-                  "font-medium leading-tight text-brand-600",
-                  isLogin ? "text-[clamp(0.98rem,1.9vw,1.25rem)]" : "text-[clamp(1.1rem,2.2vw,1.5rem)]",
-                ].join(" ")}
-              >
-                {copy.subtitle}
-              </p>
-              {"description" in copy ? <p className="mt-2 text-[0.96rem] leading-tight text-ink-500 sm:text-[1rem]">{copy.description}</p> : null}
-            </div>
-
-            <form onSubmit={handleSubmit} className={(isLogin ? "mt-6 w-full max-w-[520px]" : "mt-7 w-full max-w-[620px]") + " animate-fade-up"} style={{ animationDelay: "120ms" }}>
-              <div className={isLogin ? "space-y-4" : "space-y-5"}>
+              <div className={isLogin ? "space-y-2" : "space-y-3"}>
                 {mode === "signup" ? (
-                  <FieldShell label="Enter Login Id" error={signupErrors.loginId}>
+                  <FieldShell
+                    label="Enter Login Id"
+                    error={signupErrors.loginId}
+                  >
                     <TextField
                       name="loginId"
                       value={signupValues.loginId}
                       onChange={(value) => updateSignup("loginId", value)}
                       onBlur={() => markSignupTouched("loginId")}
                       placeholder="Enter your name"
-                      error={(signupTouched.loginId || submitAttempted) ? signupErrors.loginId : undefined}
+                      error={
+                        signupTouched.loginId || submitAttempted
+                          ? signupErrors.loginId
+                          : undefined
+                      }
                       variant="signup"
                       autoComplete="username"
                       leftIcon={<UserIcon className="h-5 w-5" />}
@@ -324,7 +363,11 @@ export function AuthScreen({ variant }: AuthScreenProps) {
                       onChange={(value) => updateSignup("email", value)}
                       onBlur={() => markSignupTouched("email")}
                       placeholder="Enter your email id"
-                      error={(signupTouched.email || submitAttempted) ? signupErrors.email : undefined}
+                      error={
+                        signupTouched.email || submitAttempted
+                          ? signupErrors.email
+                          : undefined
+                      }
                       variant="signup"
                       autoComplete="email"
                       inputMode="email"
@@ -333,7 +376,14 @@ export function AuthScreen({ variant }: AuthScreenProps) {
                   </FieldShell>
                 ) : null}
 
-                <FieldShell label={mode === "login" ? "Login ID" : "Enter Password"} error={mode === "login" ? loginErrors.loginId : signupErrors.password}>
+                <FieldShell
+                  label={mode === "login" ? "Login ID" : "Enter Password"}
+                  error={
+                    mode === "login"
+                      ? loginErrors.loginId
+                      : signupErrors.password
+                  }
+                >
                   {mode === "login" ? (
                     <TextField
                       name="loginId"
@@ -341,7 +391,11 @@ export function AuthScreen({ variant }: AuthScreenProps) {
                       onChange={(value) => updateLogin("loginId", value)}
                       onBlur={() => markLoginTouched("loginId")}
                       placeholder="Enter your login ID"
-                      error={(loginTouched.loginId || submitAttempted) ? loginErrors.loginId : undefined}
+                      error={
+                        loginTouched.loginId || submitAttempted
+                          ? loginErrors.loginId
+                          : undefined
+                      }
                       variant="login"
                       autoComplete="username"
                       leftIcon={<UserIcon className="h-5 w-5" />}
@@ -353,7 +407,11 @@ export function AuthScreen({ variant }: AuthScreenProps) {
                       onChange={(value) => updateSignup("password", value)}
                       onBlur={() => markSignupTouched("password")}
                       placeholder="Enter your password"
-                      error={(signupTouched.password || submitAttempted) ? signupErrors.password : undefined}
+                      error={
+                        signupTouched.password || submitAttempted
+                          ? signupErrors.password
+                          : undefined
+                      }
                       variant="signup"
                       autoComplete="new-password"
                       type={showPassword ? "text" : "password"}
@@ -362,8 +420,10 @@ export function AuthScreen({ variant }: AuthScreenProps) {
                         <button
                           type="button"
                           onClick={() => setShowPassword((value) => !value)}
-                          className="text-brand-700/90 transition hover:text-brand-800"
-                          aria-label={showPassword ? "Hide password" : "Show password"}
+                          className="rounded-[0.25rem] px-1.5 py-1 text-brand-700/90 transition hover:text-brand-800"
+                          aria-label={
+                            showPassword ? "Hide password" : "Show password"
+                          }
                         >
                           <EyeToggleIcon open={showPassword} />
                         </button>
@@ -380,7 +440,11 @@ export function AuthScreen({ variant }: AuthScreenProps) {
                       onChange={(value) => updateLogin("password", value)}
                       onBlur={() => markLoginTouched("password")}
                       placeholder="Enter your password"
-                      error={(loginTouched.password || submitAttempted) ? loginErrors.password : undefined}
+                      error={
+                        loginTouched.password || submitAttempted
+                          ? loginErrors.password
+                          : undefined
+                      }
                       variant="login"
                       autoComplete="current-password"
                       type={showPassword ? "text" : "password"}
@@ -389,8 +453,10 @@ export function AuthScreen({ variant }: AuthScreenProps) {
                         <button
                           type="button"
                           onClick={() => setShowPassword((value) => !value)}
-                          className="text-ink-400 transition hover:text-ink-600"
-                          aria-label={showPassword ? "Hide password" : "Show password"}
+                          className="rounded-[0.25rem] px-1.5 py-1 text-ink-400 transition hover:text-ink-600"
+                          aria-label={
+                            showPassword ? "Hide password" : "Show password"
+                          }
                         >
                           <EyeToggleIcon open={showPassword} />
                         </button>
@@ -400,14 +466,23 @@ export function AuthScreen({ variant }: AuthScreenProps) {
                 ) : null}
 
                 {mode === "signup" ? (
-                  <FieldShell label="Re-Enter Password" error={signupErrors.confirmPassword}>
+                  <FieldShell
+                    label="Re-Enter Password"
+                    error={signupErrors.confirmPassword}
+                  >
                     <TextField
                       name="confirmPassword"
                       value={signupValues.confirmPassword}
-                      onChange={(value) => updateSignup("confirmPassword", value)}
+                      onChange={(value) =>
+                        updateSignup("confirmPassword", value)
+                      }
                       onBlur={() => markSignupTouched("confirmPassword")}
                       placeholder="Re-enter your password"
-                      error={(signupTouched.confirmPassword || submitAttempted) ? signupErrors.confirmPassword : undefined}
+                      error={
+                        signupTouched.confirmPassword || submitAttempted
+                          ? signupErrors.confirmPassword
+                          : undefined
+                      }
                       variant="signup"
                       autoComplete="new-password"
                       type={showConfirmPassword ? "text" : "password"}
@@ -415,9 +490,15 @@ export function AuthScreen({ variant }: AuthScreenProps) {
                       rightSlot={
                         <button
                           type="button"
-                          onClick={() => setShowConfirmPassword((value) => !value)}
-                          className="text-brand-700/90 transition hover:text-brand-800"
-                          aria-label={showConfirmPassword ? "Hide confirmation password" : "Show confirmation password"}
+                          onClick={() =>
+                            setShowConfirmPassword((value) => !value)
+                          }
+                          className="rounded-[0.25rem] px-1.5 py-1 text-brand-700/90 transition hover:text-brand-800"
+                          aria-label={
+                            showConfirmPassword
+                              ? "Hide confirmation password"
+                              : "Show confirmation password"
+                          }
                         >
                           <EyeToggleIcon open={showConfirmPassword} />
                         </button>
@@ -428,7 +509,10 @@ export function AuthScreen({ variant }: AuthScreenProps) {
               </div>
 
               {submitError ? (
-                <p className="mt-4 rounded-[10px] border border-red-200 bg-red-50 px-3 py-2.5 text-xs font-medium text-red-600 sm:text-sm" role="alert">
+                <p
+                  className="mt-4 rounded-[0.25rem] border border-red-200 bg-red-50 px-3 py-2.5 text-xs font-medium text-red-600 sm:text-sm"
+                  role="alert"
+                >
                   {submitError}
                 </p>
               ) : null}
@@ -437,28 +521,42 @@ export function AuthScreen({ variant }: AuthScreenProps) {
                 type="submit"
                 disabled={loading}
                 className={[
-                  "flex h-[3.15rem] w-full items-center justify-center rounded-[10px] border border-brand-600 bg-brand-600 text-[0.9rem] font-semibold tracking-[0.02em] text-white transition duration-150 hover:bg-brand-700 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-70 sm:h-[3.7rem] sm:text-[0.98rem]",
+                  "flex h-[3.15rem] w-full items-center justify-center rounded-[0.25rem] border border-brand-600 bg-brand-600 text-[0.9rem] font-semibold tracking-[0.02em] text-white transition duration-150 hover:bg-brand-700 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-70 sm:h-[3.7rem] sm:text-[0.98rem]",
                   isLogin ? "mt-4" : "mt-5",
                 ].join(" ")}
               >
                 {loading ? "PLEASE WAIT..." : copy.actionLabel}
               </button>
 
-              <div className={["flex flex-wrap items-center justify-center gap-2 text-center text-[0.84rem] sm:text-[1rem]", isLogin ? "mt-3" : "mt-4"].join(" ")}>
+              <div
+                className={[
+                  "flex flex-wrap items-center justify-center gap-2 text-center text-[0.84rem] sm:text-[1rem]",
+                  isLogin ? "mt-3" : "mt-4",
+                ].join(" ")}
+              >
                 {isLogin ? (
                   <>
-                    <Link href="/forgot-password" className="text-ink-700 transition hover:text-ink-900 active:scale-[0.98]">
+                    <Link
+                      href="/forgot-password"
+                      className="text-ink-700 transition hover:text-ink-900 active:scale-[0.98]"
+                    >
                       {copy.helperLabel}
                     </Link>
                     <span className="text-ink-400">|</span>
-                    <Link href={copy.linkHref} className="font-semibold text-brand-600 transition hover:text-brand-700">
+                    <Link
+                      href={copy.linkHref}
+                      className="font-semibold text-brand-600 transition hover:text-brand-700"
+                    >
                       {copy.linkLabel}
                     </Link>
                   </>
                 ) : (
                   <>
                     <span className="text-ink-700">{copy.helperLabel}</span>
-                    <Link href={copy.linkHref} className="font-semibold text-brand-600 transition hover:text-brand-700">
+                    <Link
+                      href={copy.linkHref}
+                      className="font-semibold text-brand-600 transition hover:text-brand-700"
+                    >
                       {copy.linkLabel}
                     </Link>
                   </>
@@ -468,10 +566,10 @@ export function AuthScreen({ variant }: AuthScreenProps) {
               <Link
                 href={copy.switchHref}
                 className={[
-                  "mt-4 flex w-full items-center justify-center gap-3 rounded-[10px] border border-slate-200 px-4 py-2.5 text-[0.86rem] font-semibold text-brand-700 transition hover:bg-slate-50 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-70 sm:mt-5 sm:py-3 sm:text-[0.98rem]",
+                  "mt-4 flex w-full items-center justify-center gap-3 rounded-[0.25rem] border border-slate-200 px-4 py-2.5 text-[0.86rem] font-semibold text-brand-700 transition hover:bg-slate-50 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-70 sm:mt-5 sm:py-3 sm:text-[0.98rem]",
                 ].join(" ")}
               >
-                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-50 text-brand-700 sm:h-11 sm:w-11">
+                <span className="flex h-10 w-10 items-center justify-center rounded-[0.25rem] bg-brand-50 text-brand-700 sm:h-11 sm:w-11">
                   <UserIcon className="h-5 w-5 sm:h-6 sm:w-6" />
                 </span>
                 <span>{copy.switchLabel}</span>

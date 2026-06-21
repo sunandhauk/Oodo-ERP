@@ -10,6 +10,10 @@ export default async function ProductCreatePage() {
     redirect("/login");
   }
 
+  if (!session.permissions.includes("product.create")) {
+    redirect("/products");
+  }
+
   return (
     <DashboardShell user={session}>
       <ProductCreateContent />

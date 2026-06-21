@@ -1,9 +1,9 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ComponentType, SVGProps } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { BrandMark } from "@/components/brand-mark";
 import { useAuditLog } from "@/components/audit-log-provider";
 import { NotificationCenter } from "@/components/notification-center";
@@ -11,7 +11,6 @@ import { LogoutButton } from "@/components/logout-button";
 import { useEditableProfile } from "@/components/profile-store";
 import {
   BagIcon,
-  CalendarIcon,
   CartIcon,
   ChevronDownIcon,
   ClockIcon,
@@ -21,9 +20,12 @@ import {
   ReceiptIcon,
   SearchIcon,
   ShieldIcon,
+  UserIcon,
   TruckIcon,
   BoxIcon,
 } from "@/components/icons";
+import { buildSearchPath } from "@/lib/search-params";
+import { buildListPath } from "@/lib/list-filters";
 import type { ReactNode } from "react";
 import type { SessionUser } from "@/lib/auth-types";
 
@@ -48,6 +50,143 @@ type MetricCard = {
   stroke: string;
   icon: ComponentType<SVGProps<SVGSVGElement>>;
   spark: number[];
+};
+
+type ListRouteConfig = {
+  path: string;
+  label: string;
+  searchPlaceholder: string;
+  createPath: string;
+  createPermission: string;
+};
+
+type DashboardMetricKey =
+  | "salesOrders"
+  | "purchaseOrders"
+  | "manufacturingOrders"
+  | "pendingDeliveries"
+  | "delayedOrders"
+  | "partialReceipts";
+
+type DashboardMetricSummary = {
+  key: DashboardMetricKey;
+  value: number;
+  deltaPercent: number;
+  spark: number[];
+};
+
+type DashboardSummary = {
+  metrics: DashboardMetricSummary[];
+  completion: {
+    percent: number;
+    completed: number;
+    inProgress: number;
+    pending: number;
+    delayed: number;
+  };
+  salesOverview: {
+    total: number;
+    statuses: Array<{ label: string; value: number }>;
+  };
+  purchaseOverview: {
+    total: number;
+    receivedSeries: number[];
+    pendingSeries: number[];
+    statuses: Array<{ label: string; value: number }>;
+  };
+  manufacturingOverview: {
+    total: number;
+    statuses: Array<{ label: string; value: number }>;
+  };
+  generatedAt: string;
+};
+
+const DEFAULT_SERIES = [0, 0, 0, 0, 0, 0, 0];
+
+const LIST_ROUTE_CONFIG: ListRouteConfig[] = [
+  {
+    path: "/sales-orders",
+    label: "Sales Orders",
+    searchPlaceholder: "Search sales orders...",
+    createPath: "/sales-orders/new",
+    createPermission: "sales.create",
+  },
+  {
+    path: "/purchase-orders",
+    label: "Purchase Orders",
+    searchPlaceholder: "Search purchase orders...",
+    createPath: "/purchase-orders/new",
+    createPermission: "purchase.create",
+  },
+  {
+    path: "/manufacturing-orders",
+    label: "Manufacturing Orders",
+    searchPlaceholder: "Search manufacturing orders...",
+    createPath: "/manufacturing-orders/new",
+    createPermission: "manufacturing.create",
+  },
+  {
+    path: "/bills-of-materials",
+    label: "Bills of Materials",
+    searchPlaceholder: "Search bills of materials...",
+    createPath: "/bills-of-materials/new",
+    createPermission: "manufacturing.create",
+  },
+  {
+    path: "/products",
+    label: "Products",
+    searchPlaceholder: "Search products...",
+    createPath: "/products/new",
+    createPermission: "product.create",
+  },
+];
+
+const METRIC_CONFIG: Record<
+  DashboardMetricKey,
+  Omit<MetricCard, "value" | "delta" | "spark">
+> = {
+  salesOrders: {
+    label: "Total Sales Orders",
+    color: "text-brand-600",
+    bg: "bg-brand-50",
+    stroke: "#2b9e7a",
+    icon: CartIcon,
+  },
+  purchaseOrders: {
+    label: "Total Purchase Orders",
+    color: "text-emerald-600",
+    bg: "bg-emerald-50",
+    stroke: "#10b981",
+    icon: BagIcon,
+  },
+  manufacturingOrders: {
+    label: "Manufacturing Orders",
+    color: "text-violet-600",
+    bg: "bg-violet-50",
+    stroke: "#8b5cf6",
+    icon: FactoryIcon,
+  },
+  pendingDeliveries: {
+    label: "Pending Deliveries",
+    color: "text-amber-600",
+    bg: "bg-amber-50",
+    stroke: "#f59e0b",
+    icon: TruckIcon,
+  },
+  delayedOrders: {
+    label: "Delayed Orders",
+    color: "text-rose-600",
+    bg: "bg-rose-50",
+    stroke: "#ef4444",
+    icon: ClockIcon,
+  },
+  partialReceipts: {
+    label: "Partial Receipts",
+    color: "text-cyan-600",
+    bg: "bg-cyan-50",
+    stroke: "#06b6d4",
+    icon: ReceiptIcon,
+  },
 };
 
 function BadgeIcon({
@@ -111,6 +250,46 @@ function Donut({
   );
 }
 
+function DashboardKpiCard({
+  label,
+  value,
+  hint,
+  accentClassName,
+  active,
+  onClick,
+}: {
+  label: string;
+  value: number;
+  hint: string;
+  accentClassName: string;
+  active?: boolean;
+  onClick?: () => void;
+}) {
+  const classes = [
+    "rounded-[0.25rem] border bg-white p-4 text-left shadow-[0_16px_38px_rgba(15,23,42,0.05)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_22px_48px_rgba(15,23,42,0.08)]",
+    active ? "border-brand-300 ring-2 ring-brand-100" : "border-slate-200",
+    onClick ? "cursor-pointer" : "cursor-default",
+  ].join(" ");
+
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} className={classes}>
+        <div className={`text-xs font-semibold uppercase tracking-[0.14em] ${accentClassName}`}>{label}</div>
+        <div className="mt-2 text-3xl font-extrabold tracking-[-0.04em] text-slate-900">{value}</div>
+        <div className="mt-1 text-sm text-slate-500">{hint}</div>
+      </button>
+    );
+  }
+
+  return (
+    <div className={classes}>
+      <div className={`text-xs font-semibold uppercase tracking-[0.14em] ${accentClassName}`}>{label}</div>
+      <div className="mt-2 text-3xl font-extrabold tracking-[-0.04em] text-slate-900">{value}</div>
+      <div className="mt-1 text-sm text-slate-500">{hint}</div>
+    </div>
+  );
+}
+
 function getInitials(name: string) {
   return name
     .split(/\s+/)
@@ -123,20 +302,13 @@ function getInitials(name: string) {
 export function DashboardShell({ user, children }: DashboardShellProps) {
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { appendAuditLog } = useAuditLog();
   const { profile } = useEditableProfile(user);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-
-  const todayLabel = useMemo(
-    () =>
-      new Intl.DateTimeFormat("en-US", {
-        month: "long",
-        day: "numeric",
-        year: "numeric",
-      }).format(new Date()),
-    [],
-  );
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [dashboardSummary, setDashboardSummary] = useState<DashboardSummary | null>(null);
+  const [dashboardError, setDashboardError] = useState("");
 
   const navItems: SidebarItem[] = useMemo(
     () => [
@@ -146,12 +318,17 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
       { label: "Manufacturing Orders", icon: FactoryIcon, path: "/manufacturing-orders" },
       { label: "Bills of Materials", icon: ReceiptIcon, path: "/bills-of-materials" },
       { label: "Products", icon: BoxIcon, path: "/products" },
+      ...(user.permissions.includes("users.manage") ? [{ label: "Users", icon: UserIcon, path: "/users" }] : []),
       { label: "Audit Logs", icon: ShieldIcon, path: "/audit-logs" },
     ],
-    [],
+    [user.permissions],
   );
 
   const isDashboardRoute = pathname.startsWith("/dashboard");
+  const activeListRoute = useMemo(() => LIST_ROUTE_CONFIG.find((route) => pathname === route.path), [pathname]);
+  const canQuickCreate = activeListRoute ? user.permissions.includes(activeListRoute.createPermission) : false;
+  const isSidebarCompact = sidebarCollapsed;
+  const shellSearchQuery = searchParams.get("q") ?? "";
 
   useEffect(() => {
     appendAuditLog({
@@ -180,6 +357,56 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
     const element = document.getElementById(hashTarget);
     element?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [isDashboardRoute, pathname]);
+
+  useEffect(() => {
+    let active = true;
+    const controller = new AbortController();
+
+    async function loadSummary() {
+      try {
+        setDashboardError("");
+        const response = await fetch("/api/dashboard/summary", {
+          method: "GET",
+          cache: "no-store",
+          signal: controller.signal,
+        });
+
+        const payload = (await response.json().catch(() => null)) as
+          | { status?: string; data?: DashboardSummary; error?: unknown }
+          | null;
+
+        if (!response.ok || payload?.status !== "success" || !payload.data) {
+          throw new Error(
+            typeof payload?.error === "string"
+              ? payload.error
+              : "Unable to load dashboard data.",
+          );
+        }
+
+        if (active) {
+          setDashboardSummary(payload.data);
+        }
+      } catch (error) {
+        if (!active) {
+          return;
+        }
+
+        setDashboardSummary(null);
+        setDashboardError(error instanceof Error ? error.message : "Unable to load dashboard data.");
+      }
+    }
+
+    void loadSummary();
+    const refreshHandle = window.setInterval(() => {
+      void loadSummary();
+    }, 60000);
+
+    return () => {
+      active = false;
+      controller.abort();
+      window.clearInterval(refreshHandle);
+    };
+  }, []);
 
   function setSidebarVisible(nextOpen: boolean) {
     if (sidebarOpen === nextOpen) {
@@ -224,6 +451,34 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
     router.push("/profile");
   }
 
+  function openQuickCreate() {
+    if (!activeListRoute || !canQuickCreate) {
+      return;
+    }
+
+    appendAuditLog({
+      user: profile.displayName,
+      module: activeListRoute.label,
+      recordType: "Page",
+      recordId: activeListRoute.createPath,
+      action: "Viewed",
+      fieldChanged: "Quick action",
+      oldValue: pathname,
+      newValue: activeListRoute.createPath,
+      details: `Opened ${activeListRoute.label} create page from the shortcut button`,
+    });
+
+    router.push(activeListRoute.createPath);
+  }
+
+  function updateShellSearch(nextQuery: string) {
+    if (!activeListRoute) {
+      return;
+    }
+
+    router.replace(buildSearchPath(pathname, searchParams, nextQuery), { scroll: false });
+  }
+
   function handleSidebarItemClick(item: SidebarItem) {
     appendAuditLog({
       user: user.displayName,
@@ -261,14 +516,234 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
     closeSidebar();
   }
 
-  const metrics: MetricCard[] = [
-    { label: "Total Sales Orders", value: "32", delta: "12% from last month", color: "text-brand-600", bg: "bg-brand-50", stroke: "#2b9e7a", icon: CartIcon, spark: [18, 22, 21, 27, 24, 30] },
-    { label: "Total Purchase Orders", value: "32", delta: "8% from last month", color: "text-emerald-600", bg: "bg-emerald-50", stroke: "#10b981", icon: BagIcon, spark: [16, 20, 19, 24, 23, 28] },
-    { label: "Manufacturing Orders", value: "36", delta: "15% from last month", color: "text-violet-600", bg: "bg-violet-50", stroke: "#8b5cf6", icon: FactoryIcon, spark: [15, 19, 18, 25, 26, 31] },
-    { label: "Pending Deliveries", value: "18", delta: "9% from last month", color: "text-amber-600", bg: "bg-amber-50", stroke: "#f59e0b", icon: TruckIcon, spark: [12, 13, 15, 17, 16, 19] },
-    { label: "Delayed Orders", value: "22", delta: "5% from last month", color: "text-rose-600", bg: "bg-rose-50", stroke: "#ef4444", icon: ClockIcon, spark: [14, 15, 14, 18, 17, 20] },
-    { label: "Partial Receipts", value: "7", delta: "4% from last month", color: "text-cyan-600", bg: "bg-cyan-50", stroke: "#06b6d4", icon: ReceiptIcon, spark: [8, 9, 10, 11, 12, 13] },
-  ];
+  const numberFormatter = useMemo(() => new Intl.NumberFormat("en-US"), []);
+  const isSummaryLoading = dashboardSummary === null && !dashboardError;
+  const summaryStatusLabel = dashboardError ? dashboardError : isSummaryLoading ? "Loading live dashboard data..." : `Updated ${new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" }).format(new Date(dashboardSummary?.generatedAt || Date.now()))}`;
+  const metrics: MetricCard[] = useMemo(() => {
+    const metricMap = new Map(dashboardSummary?.metrics.map((metric) => [metric.key, metric]) ?? []);
+    return (Object.entries(METRIC_CONFIG) as Array<[DashboardMetricKey, (typeof METRIC_CONFIG)[DashboardMetricKey]]>).map(([key, config]) => {
+      const metric = metricMap.get(key);
+      return {
+        ...config,
+        value: metric ? numberFormatter.format(metric.value) : "—",
+        delta: metric ? `${metric.deltaPercent >= 0 ? "+" : ""}${metric.deltaPercent}% vs previous 7 days` : summaryStatusLabel,
+        spark: metric?.spark ?? DEFAULT_SERIES,
+      };
+    });
+  }, [dashboardSummary, numberFormatter, summaryStatusLabel]);
+
+  const salesOverview =
+    dashboardSummary?.salesOverview ?? {
+      total: 0,
+      statuses: [
+        { label: "Draft", value: 0 },
+        { label: "Confirmed", value: 0 },
+        { label: "Partially Delivered", value: 0 },
+        { label: "Delivered", value: 0 },
+        { label: "Late", value: 0 },
+      ],
+    };
+
+  const purchaseOverview =
+    dashboardSummary?.purchaseOverview ?? {
+      total: 0,
+      receivedSeries: DEFAULT_SERIES,
+      pendingSeries: DEFAULT_SERIES,
+      statuses: [
+        { label: "Draft", value: 0 },
+        { label: "Confirmed", value: 0 },
+        { label: "Pending", value: 0 },
+        { label: "Received", value: 0 },
+        { label: "Cancelled", value: 0 },
+      ],
+    };
+  const manufacturingOverview =
+    dashboardSummary?.manufacturingOverview ?? {
+      total: 0,
+      statuses: [
+        { label: "Draft", value: 0 },
+        { label: "Confirmed", value: 0 },
+        { label: "In Progress", value: 0 },
+        { label: "Done", value: 0 },
+        { label: "Cancelled", value: 0 },
+      ],
+    };
+
+  const isAdmin = user.roles.includes("admin");
+
+  const moduleStatusValue = useCallback(
+    (statuses: Array<{ label: string; value: number }>, label: string) => statuses.find((status) => status.label === label)?.value ?? 0,
+    [],
+  );
+
+  const salesKpis = useMemo(
+    () => [
+      {
+        label: "Total Orders",
+        value: salesOverview.total,
+        hint: "All sales order records",
+        accentClassName: "text-slate-500",
+        onClick: () => router.push("/sales-orders"),
+      },
+      {
+        label: "Confirmed",
+        value: moduleStatusValue(salesOverview.statuses, "Confirmed"),
+        hint: "Confirmed orders",
+        accentClassName: "text-emerald-600",
+        onClick: () => router.push(buildListPath("/sales-orders", new URLSearchParams(), { status: "Confirmed" })),
+      },
+      {
+        label: "Pending",
+        value: moduleStatusValue(salesOverview.statuses, "Pending"),
+        hint: "Awaiting fulfillment",
+        accentClassName: "text-amber-600",
+        onClick: () => router.push(buildListPath("/sales-orders", new URLSearchParams(), { status: "Pending" })),
+      },
+      {
+        label: "Delivered",
+        value: moduleStatusValue(salesOverview.statuses, "Delivered"),
+        hint: "Completed deliveries",
+        accentClassName: "text-blue-600",
+        onClick: () => router.push(buildListPath("/sales-orders", new URLSearchParams(), { status: "Delivered" })),
+      },
+    ],
+    [moduleStatusValue, router, salesOverview.statuses, salesOverview.total],
+  );
+
+  const salesAdminKpis = useMemo(
+    () => [
+      {
+        label: "Partially Delivered",
+        value: moduleStatusValue(salesOverview.statuses, "Partially Delivered"),
+        hint: "Admin KPI",
+        accentClassName: "text-blue-600",
+        onClick: () => router.push(buildListPath("/sales-orders", new URLSearchParams(), { status: "Partially Delivered" })),
+      },
+      {
+        label: "Cancelled",
+        value: moduleStatusValue(salesOverview.statuses, "Cancelled"),
+        hint: "Admin KPI",
+        accentClassName: "text-rose-600",
+        onClick: () => router.push(buildListPath("/sales-orders", new URLSearchParams(), { status: "Cancelled" })),
+      },
+      {
+        label: "Draft",
+        value: moduleStatusValue(salesOverview.statuses, "Draft"),
+        hint: "Admin KPI",
+        accentClassName: "text-slate-500",
+        onClick: () => router.push(buildListPath("/sales-orders", new URLSearchParams(), { status: "Draft" })),
+      },
+    ],
+    [moduleStatusValue, router, salesOverview.statuses],
+  );
+
+  const purchaseKpis = useMemo(
+    () => [
+      {
+        label: "Total Orders",
+        value: purchaseOverview.total,
+        hint: "All purchase order records",
+        accentClassName: "text-slate-500",
+        onClick: () => router.push("/purchase-orders"),
+      },
+      {
+        label: "Confirmed",
+        value: moduleStatusValue(purchaseOverview.statuses, "Confirmed"),
+        hint: "Confirmed orders",
+        accentClassName: "text-emerald-600",
+        onClick: () => router.push(buildListPath("/purchase-orders", new URLSearchParams(), { status: "Confirmed" })),
+      },
+      {
+        label: "Pending",
+        value: moduleStatusValue(purchaseOverview.statuses, "Pending"),
+        hint: "Awaiting receipt",
+        accentClassName: "text-amber-600",
+        onClick: () => router.push(buildListPath("/purchase-orders", new URLSearchParams(), { status: "Pending" })),
+      },
+      {
+        label: "Received",
+        value: moduleStatusValue(purchaseOverview.statuses, "Received"),
+        hint: "Received orders",
+        accentClassName: "text-blue-600",
+        onClick: () => router.push(buildListPath("/purchase-orders", new URLSearchParams(), { status: "Received" })),
+      },
+    ],
+    [moduleStatusValue, purchaseOverview.statuses, purchaseOverview.total, router],
+  );
+
+  const purchaseAdminKpis = useMemo(
+    () => [
+      {
+        label: "Draft",
+        value: moduleStatusValue(purchaseOverview.statuses, "Draft"),
+        hint: "Admin KPI",
+        accentClassName: "text-slate-500",
+        onClick: () => router.push(buildListPath("/purchase-orders", new URLSearchParams(), { status: "Draft" })),
+      },
+      {
+        label: "Cancelled",
+        value: moduleStatusValue(purchaseOverview.statuses, "Cancelled"),
+        hint: "Admin KPI",
+        accentClassName: "text-rose-600",
+        onClick: () => router.push(buildListPath("/purchase-orders", new URLSearchParams(), { status: "Cancelled" })),
+      },
+    ],
+    [moduleStatusValue, purchaseOverview.statuses, router],
+  );
+
+  const manufacturingKpis = useMemo(
+    () => [
+      {
+        label: "Total Orders",
+        value: manufacturingOverview.total,
+        hint: "All manufacturing order records",
+        accentClassName: "text-slate-500",
+        onClick: () => router.push("/manufacturing-orders"),
+      },
+      {
+        label: "Confirmed",
+        value: moduleStatusValue(manufacturingOverview.statuses, "Confirmed"),
+        hint: "Confirmed orders",
+        accentClassName: "text-emerald-600",
+        onClick: () => router.push(buildListPath("/manufacturing-orders", new URLSearchParams(), { status: "Confirmed" })),
+      },
+      {
+        label: "In Progress",
+        value: moduleStatusValue(manufacturingOverview.statuses, "In Progress"),
+        hint: "Work currently in process",
+        accentClassName: "text-violet-600",
+        onClick: () => router.push(buildListPath("/manufacturing-orders", new URLSearchParams(), { status: "In Progress" })),
+      },
+      {
+        label: "Done",
+        value: moduleStatusValue(manufacturingOverview.statuses, "Done"),
+        hint: "Finished manufacturing orders",
+        accentClassName: "text-blue-600",
+        onClick: () => router.push(buildListPath("/manufacturing-orders", new URLSearchParams(), { status: "Done" })),
+      },
+    ],
+    [manufacturingOverview.statuses, manufacturingOverview.total, moduleStatusValue, router],
+  );
+
+  const manufacturingAdminKpis = useMemo(
+    () => [
+      {
+        label: "Draft",
+        value: moduleStatusValue(manufacturingOverview.statuses, "Draft"),
+        hint: "Admin KPI",
+        accentClassName: "text-slate-500",
+        onClick: () => router.push(buildListPath("/manufacturing-orders", new URLSearchParams(), { status: "Draft" })),
+      },
+      {
+        label: "Cancelled",
+        value: moduleStatusValue(manufacturingOverview.statuses, "Cancelled"),
+        hint: "Admin KPI",
+        accentClassName: "text-rose-600",
+        onClick: () => router.push(buildListPath("/manufacturing-orders", new URLSearchParams(), { status: "Cancelled" })),
+      },
+    ],
+    [manufacturingOverview.statuses, moduleStatusValue, router],
+  );
 
   return (
     <main className="h-[100dvh] overflow-hidden bg-[linear-gradient(180deg,#f8fafc_0%,#f3f7fb_100%)] text-slate-900">
@@ -277,24 +752,39 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
 
         <aside
           className={[
-            "fixed inset-y-0 left-0 z-50 w-[286px] overflow-hidden transform border-r border-brand-100/80 bg-[linear-gradient(180deg,rgba(239,250,247,0.98)_0%,rgba(247,252,250,0.96)_42%,rgba(233,247,242,0.96)_100%)] shadow-[0_18px_50px_rgba(31,158,122,0.08)] backdrop-blur-xl transition-transform duration-300 lg:sticky lg:top-0 lg:z-auto lg:translate-x-0 lg:shadow-none",
+            "fixed inset-y-0 left-0 z-50 w-[286px] overflow-hidden transform border-r border-brand-100/80 bg-[linear-gradient(180deg,rgba(239,250,247,0.98)_0%,rgba(247,252,250,0.96)_42%,rgba(233,247,242,0.96)_100%)] shadow-[0_18px_50px_rgba(31,158,122,0.08)] backdrop-blur-xl transition-[transform,width] duration-300 lg:sticky lg:top-0 lg:z-auto lg:translate-x-0 lg:shadow-none",
+            sidebarCollapsed ? "lg:w-[88px]" : "lg:w-[286px]",
             sidebarOpen ? "translate-x-0" : "-translate-x-full",
           ].join(" ")}
         >
           <div className="flex h-full min-h-0 flex-col">
-            <div className="flex h-[96px] items-center justify-between border-b border-slate-200/70 px-6">
-              <BrandMark className="h-14 w-14 animate-float-soft" />
-              <button
-                type="button"
-                onClick={closeSidebar}
-                className="flex h-10 w-10 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 lg:hidden"
-                aria-label="Close sidebar"
-              >
-                <MenuDotsIcon className="h-6 w-6 rotate-90" />
-              </button>
+            <div className={[
+              "flex h-[96px] min-w-0 items-center justify-between border-b border-slate-200/70",
+              sidebarCollapsed ? "px-3 lg:px-3" : "px-6",
+            ].join(" ")}>
+              <BrandMark className={sidebarCollapsed ? "h-11 w-11" : "h-14 w-14 animate-float-soft"} />
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSidebarCollapsed((current) => !current)}
+                  className="hidden h-10 w-10 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 lg:flex"
+                  aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+                  aria-expanded={!sidebarCollapsed}
+                >
+                  <ChevronDownIcon className={sidebarCollapsed ? "h-5 w-5 -rotate-90" : "h-5 w-5 rotate-90"} />
+                </button>
+                <button
+                  type="button"
+                  onClick={closeSidebar}
+                  className="flex h-10 w-10 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 lg:hidden"
+                  aria-label="Close sidebar"
+                >
+                  <MenuDotsIcon className="h-6 w-6 rotate-90" />
+                </button>
+              </div>
             </div>
 
-            <nav className="flex-1 min-h-0 space-y-2 overflow-y-auto px-4 py-5">
+            <nav className={["flex-1 min-h-0 space-y-2 overflow-y-auto py-5", sidebarCollapsed ? "px-2 lg:px-2" : "px-4"].join(" ")}>
               {navItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = item.path ? pathname.startsWith(item.path) : false;
@@ -302,43 +792,52 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
                   <button
                     key={item.label}
                     type="button"
+                    aria-label={item.label}
+                    title={sidebarCollapsed ? item.label : undefined}
                     onClick={() => handleSidebarItemClick(item)}
                     className={[
-                      "flex w-full items-center gap-4 rounded-2xl px-4 py-3.5 text-left text-[0.96rem] font-semibold transition duration-200 hover:-translate-y-0.5 active:scale-[0.99]",
+                      "flex w-full items-center gap-4 rounded-[0.25rem] py-3.5 text-left text-[0.96rem] font-semibold transition duration-200 hover:-translate-y-0.5 active:scale-[0.99]",
+                      sidebarCollapsed ? "justify-center px-0 lg:px-0" : "px-4",
                       isActive ? "bg-[#edf9f4] text-brand-700 shadow-[inset_0_0_0_1px_rgba(31,158,122,0.08)]" : "text-slate-700 hover:bg-slate-50 hover:text-slate-900",
                     ].join(" ")}
                   >
                     <span className={isActive ? "text-brand-600" : "text-slate-500"}>
                       <Icon className="h-5 w-5" />
                     </span>
-                    <span>{item.label}</span>
+                    <span className={sidebarCollapsed ? "sr-only lg:hidden" : ""}>{item.label}</span>
                   </button>
                 );
               })}
             </nav>
 
-            <div className="border-t border-brand-100/80 p-4">
-              <LogoutButton user={user} />
+            <div className={["border-t border-brand-100/80 p-4", sidebarCollapsed ? "lg:px-2" : ""].join(" ")}>
+              <LogoutButton user={user} compact={sidebarCollapsed} />
             </div>
           </div>
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col">
           <header className="flex h-[76px] items-center justify-between border-b border-slate-200/70 bg-white/70 px-4 backdrop-blur-xl sm:px-6">
-            <div className="flex items-center gap-3">
-              <div className="hidden md:block">
-                <div className="relative w-[390px] max-w-[42vw]">
-                  <SearchIcon className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
-                  <input
-                    type="search"
-                    value={searchQuery}
-                    onChange={(event) => setSearchQuery(event.target.value)}
-                    placeholder="Search anything..."
-                    aria-label="Search anything"
-                    className="h-12 w-full rounded-full border border-slate-200 bg-white pl-12 pr-4 text-sm font-medium text-slate-900 shadow-[0_10px_24px_rgba(15,23,42,0.04)] outline-none transition placeholder:text-slate-400 focus:border-brand-300 focus:ring-4 focus:ring-brand-100"
-                  />
-                </div>
-              </div>
+            <div className="flex min-w-0 flex-1 items-center gap-3">
+              {activeListRoute ? (
+                <>
+                  <div className="hidden min-w-0 flex-1 md:block">
+                    <div className="relative w-full max-w-[42vw]">
+                      <SearchIcon className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+                      <input
+                        type="search"
+                        value={shellSearchQuery}
+                        onChange={(event) => updateShellSearch(event.target.value)}
+                        placeholder={activeListRoute.searchPlaceholder}
+                        aria-label={activeListRoute.searchPlaceholder}
+                        className="h-12 w-full rounded-full border border-slate-200 bg-white pl-12 pr-4 text-sm font-medium text-slate-900 shadow-[0_10px_24px_rgba(15,23,42,0.04)] outline-none transition placeholder:text-slate-400 focus:border-brand-300 focus:ring-4 focus:ring-brand-100"
+                      />
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="flex-1" />
+              )}
             </div>
 
             <div className="flex items-center gap-3 sm:gap-4">
@@ -349,9 +848,9 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
                 onClick={openProfile}
                 aria-label={`Account menu for ${profile.displayName}`}
                 title={profile.displayName}
-                className="flex items-center gap-3 rounded-full border border-slate-200 bg-white px-2 py-1.5 pr-4 shadow-sm transition duration-200 hover:bg-slate-50 active:scale-[0.99]"
+                className="flex items-center gap-3 rounded-[0.25rem] border border-slate-200 bg-white px-2 py-1.5 pr-4 shadow-sm transition duration-200 hover:bg-slate-50 active:scale-[0.99]"
               >
-                <div className="relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-slate-100 text-sm font-bold text-slate-700">
+                <div className="relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-[0.25rem] bg-slate-100 text-sm font-bold text-slate-700">
                   {profile.avatarDataUrl ? <Image src={profile.avatarDataUrl} alt={profile.displayName} fill unoptimized className="object-cover" /> : getInitials(profile.displayName) || "U"}
                 </div>
                 <span className="hidden text-left sm:block">
@@ -376,20 +875,28 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
                   <p className="mt-1 text-[0.88rem] text-slate-500 sm:text-[0.95rem]">Here&apos;s what&apos;s happening with your business right now.</p>
                 </div>
 
-                <div className="hidden shrink-0 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-[0_10px_24px_rgba(15,23,42,0.04)] sm:flex sm:items-center sm:gap-3">
-                  <CalendarIcon className="h-5 w-5 text-slate-500" />
-                  <span>{todayLabel}</span>
-                  <ChevronDownIcon className="h-4 w-4 text-slate-400" />
-                </div>
               </section>
 
-              <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+              <section className="hidden gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
                 {metrics.map((metric, index) => {
                   const Icon = metric.icon;
+                  const metricRoute =
+                    metric.label === "Total Sales Orders"
+                      ? "/sales-orders"
+                      : metric.label === "Total Purchase Orders"
+                        ? "/purchase-orders"
+                        : metric.label === "Manufacturing Orders"
+                          ? "/manufacturing-orders"
+                          : "";
                   return (
-                    <article
+                    <button
                       key={metric.label}
-                      className="rounded-[22px] border border-slate-200 bg-white p-3.5 shadow-[0_16px_38px_rgba(15,23,42,0.05)] animate-fade-up transition duration-200 hover:-translate-y-1 hover:shadow-[0_22px_50px_rgba(15,23,42,0.08)]"
+                      type="button"
+                      onClick={metricRoute ? () => router.push(metricRoute) : undefined}
+                      className={[
+                        "rounded-[0.25rem] border border-slate-200 bg-white p-3.5 text-left shadow-[0_16px_38px_rgba(15,23,42,0.05)] animate-fade-up transition duration-200 hover:-translate-y-1 hover:shadow-[0_22px_50px_rgba(15,23,42,0.08)]",
+                        metricRoute ? "cursor-pointer" : "cursor-default",
+                      ].join(" ")}
                       style={{ animationDelay: `${index * 70}ms` }}
                     >
                       <div className="flex items-start justify-between gap-3">
@@ -403,12 +910,59 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
                       <p className="mt-1 text-[0.78rem] font-medium text-slate-500">
                         <span className={`font-bold ${metric.color}`}>↑</span> {metric.delta}
                       </p>
-                    </article>
+                    </button>
                   );
                 })}
               </section>
 
-              <section className="rounded-[24px] border border-slate-200 bg-white p-3.5 shadow-[0_16px_38px_rgba(15,23,42,0.05)] animate-fade-up" style={{ animationDelay: "120ms" }}>
+              <section className="space-y-4">
+                <article className="rounded-[0.25rem] border border-slate-200 bg-white p-3.5 shadow-[0_16px_38px_rgba(15,23,42,0.05)] animate-fade-up" style={{ animationDelay: "90ms" }}>
+                  <div className="flex items-center justify-between gap-3">
+                    <h2 className="text-[0.98rem] font-extrabold tracking-[-0.03em] text-slate-900">Sales Orders</h2>
+                    <button type="button" onClick={() => router.push("/sales-orders")} className="rounded-full border border-slate-200 px-3 py-1 text-[0.8rem] font-medium text-slate-600">
+                      View List
+                    </button>
+                  </div>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    {salesKpis.map((card) => (
+                      <DashboardKpiCard key={card.label} {...card} />
+                    ))}
+                  </div>
+                  {isAdmin ? <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{salesAdminKpis.map((card) => <DashboardKpiCard key={card.label} {...card} />)}</div> : null}
+                </article>
+
+                <article className="rounded-[0.25rem] border border-slate-200 bg-white p-3.5 shadow-[0_16px_38px_rgba(15,23,42,0.05)] animate-fade-up" style={{ animationDelay: "120ms" }}>
+                  <div className="flex items-center justify-between gap-3">
+                    <h2 className="text-[0.98rem] font-extrabold tracking-[-0.03em] text-slate-900">Purchase Orders</h2>
+                    <button type="button" onClick={() => router.push("/purchase-orders")} className="rounded-full border border-slate-200 px-3 py-1 text-[0.8rem] font-medium text-slate-600">
+                      View List
+                    </button>
+                  </div>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    {purchaseKpis.map((card) => (
+                      <DashboardKpiCard key={card.label} {...card} />
+                    ))}
+                  </div>
+                  {isAdmin ? <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-2">{purchaseAdminKpis.map((card) => <DashboardKpiCard key={card.label} {...card} />)}</div> : null}
+                </article>
+
+                <article className="rounded-[0.25rem] border border-slate-200 bg-white p-3.5 shadow-[0_16px_38px_rgba(15,23,42,0.05)] animate-fade-up" style={{ animationDelay: "150ms" }}>
+                  <div className="flex items-center justify-between gap-3">
+                    <h2 className="text-[0.98rem] font-extrabold tracking-[-0.03em] text-slate-900">Manufacturing Orders</h2>
+                    <button type="button" onClick={() => router.push("/manufacturing-orders")} className="rounded-full border border-slate-200 px-3 py-1 text-[0.8rem] font-medium text-slate-600">
+                      View List
+                    </button>
+                  </div>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    {manufacturingKpis.map((card) => (
+                      <DashboardKpiCard key={card.label} {...card} />
+                    ))}
+                  </div>
+                  {isAdmin ? <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-2">{manufacturingAdminKpis.map((card) => <DashboardKpiCard key={card.label} {...card} />)}</div> : null}
+                </article>
+              </section>
+
+              <section className="rounded-[0.25rem] border border-slate-200 bg-white p-3.5 shadow-[0_16px_38px_rgba(15,23,42,0.05)] animate-fade-up" style={{ animationDelay: "120ms" }}>
                 <div className="grid gap-4 lg:grid-cols-[240px_1fr] lg:items-center">
                   <div className="flex items-center gap-4">
                     <div>
@@ -451,7 +1005,7 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
               </section>
 
               <section className="grid gap-3 xl:grid-cols-2">
-                <article className="rounded-[24px] border border-slate-200 bg-white p-3.5 shadow-[0_16px_38px_rgba(15,23,42,0.05)] animate-fade-up transition duration-200 hover:-translate-y-1 hover:shadow-[0_22px_50px_rgba(15,23,42,0.08)]" style={{ animationDelay: "160ms" }}>
+                <article className="rounded-[0.25rem] border border-slate-200 bg-white p-3.5 shadow-[0_16px_38px_rgba(15,23,42,0.05)] animate-fade-up transition duration-200 hover:-translate-y-1 hover:shadow-[0_22px_50px_rgba(15,23,42,0.08)]" style={{ animationDelay: "160ms" }}>
                   <div className="flex items-center justify-between">
                     <h2 className="text-[0.98rem] font-extrabold tracking-[-0.03em] text-slate-900">Sales Orders Overview</h2>
                     <button type="button" className="rounded-full border border-slate-200 px-3 py-1 text-[0.8rem] font-medium text-slate-600">This Month</button>
@@ -494,7 +1048,7 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
                   </div>
                 </article>
 
-                <article className="rounded-[24px] border border-slate-200 bg-white p-3.5 shadow-[0_16px_38px_rgba(15,23,42,0.05)] animate-fade-up transition duration-200 hover:-translate-y-1 hover:shadow-[0_22px_50px_rgba(15,23,42,0.08)]" style={{ animationDelay: "220ms" }}>
+                <article className="rounded-[0.25rem] border border-slate-200 bg-white p-3.5 shadow-[0_16px_38px_rgba(15,23,42,0.05)] animate-fade-up transition duration-200 hover:-translate-y-1 hover:shadow-[0_22px_50px_rgba(15,23,42,0.08)]" style={{ animationDelay: "220ms" }}>
                   <div className="flex items-center justify-between">
                     <h2 className="text-[0.98rem] font-extrabold tracking-[-0.03em] text-slate-900">Purchase Orders Overview</h2>
                     <button type="button" className="rounded-full border border-slate-200 px-3 py-1 text-[0.8rem] font-medium text-slate-600">This Month</button>
@@ -524,7 +1078,7 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
                           <span className="flex items-center gap-2 text-brand-600"><span className="h-2.5 w-2.5 rounded-full bg-brand-500" />Pending</span>
                         </div>
                       </div>
-                      <div className="h-36 rounded-[18px] bg-[linear-gradient(180deg,#ffffff_0%,#f8fbff_100%)] p-2.5">
+                      <div className="h-36 rounded-[0.25rem] bg-[linear-gradient(180deg,#ffffff_0%,#f8fbff_100%)] p-2.5">
                         <svg viewBox="0 0 420 170" className="h-full w-full" aria-hidden="true">
                           <path d="M30 138H395" stroke="#e5e7eb" strokeWidth="2" />
                           <path d="M30 112H395" stroke="#eef2f7" strokeWidth="1" />
@@ -574,3 +1128,4 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
     </main>
   );
 }
+

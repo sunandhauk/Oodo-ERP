@@ -2,11 +2,13 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 import { useAuditLog } from "@/components/audit-log-provider";
 import { ChevronDownIcon, SearchIcon } from "@/components/icons";
 import { useBoms } from "@/components/bom-store";
 import type { BomComponentLine, BomDraft, BomStatus, BomWorkOrderLine } from "@/lib/bom";
+import { buildSearchPath } from "@/lib/search-params";
 
 function Badge({ status }: { status: BomStatus }) {
   const className =
@@ -25,7 +27,7 @@ function Badge({ status }: { status: BomStatus }) {
 }
 
 function SectionCard({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <section className={`rounded-[24px] border border-slate-200 bg-white shadow-[0_16px_38px_rgba(15,23,42,0.05)] ${className}`}>{children}</section>;
+  return <section className={`rounded-[0.25rem] border border-slate-200 bg-white shadow-[0_16px_38px_rgba(15,23,42,0.05)] ${className}`}>{children}</section>;
 }
 
 function SearchToolbarIcon() {
@@ -82,19 +84,25 @@ function makeDefaultWorkOrder(): BomWorkOrderLine {
   };
 }
 
-export function BomContent() {
+type BomContentProps = {
+  canCreate?: boolean;
+};
+
+export function BomContent({ canCreate = false }: BomContentProps) {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { appendAuditLog } = useAuditLog();
   const { boms, replaceBoms } = useBoms();
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"table" | "cards">("table");
-  const [query, setQuery] = useState("");
   const [status, setStatus] = useState<string>("All Status");
   const [page, setPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const query = searchParams.get("q") ?? "";
 
   useEffect(() => {
     if (searchOpen) {
@@ -148,6 +156,10 @@ export function BomContent() {
       newValue: "cards",
       details: "BOM switched to card view",
     });
+  }
+
+  function updateQuery(nextQuery: string) {
+    router.replace(buildSearchPath(pathname, searchParams, nextQuery), { scroll: false });
   }
 
   const filteredBoms = useMemo(() => {
@@ -212,25 +224,18 @@ export function BomContent() {
   return (
     <div className="space-y-4">
       <section className="flex flex-wrap items-end justify-between gap-4 animate-fade-up">
-        <div>
-          <div className="flex items-center gap-2 text-sm font-semibold text-slate-500">
-            <span>Home</span>
-            <span className="text-slate-300">/</span>
-            <span className="text-blue-600">Bills of Materials</span>
-            <span className="text-slate-300">/</span>
-            <span className="text-slate-500">List</span>
-          </div>
-          <h1 className="mt-2 text-[1.65rem] font-extrabold tracking-[-0.04em] text-slate-900 sm:text-[1.9rem]">Bills of Materials</h1>
-        </div>
+        <Breadcrumbs items={[{ label: "Home", href: "/dashboard" }, { label: "Bills of Materials" }]} />
 
-        <button
-          type="button"
-          onClick={() => router.push("/bills-of-materials/new")}
-          className="inline-flex items-center gap-2 rounded-2xl bg-brand-600 px-4 py-3 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(31,158,122,0.2)] transition hover:bg-brand-700"
-        >
-          <span className="text-lg leading-none">+</span>
-          New
-        </button>
+        {canCreate ? (
+          <button
+            type="button"
+            onClick={() => router.push("/bills-of-materials/new")}
+            className="inline-flex items-center gap-2 rounded-2xl bg-brand-600 px-4 py-3 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(31,158,122,0.2)] transition hover:bg-brand-700"
+          >
+            <span className="text-lg leading-none">+</span>
+            New
+          </button>
+        ) : null}
       </section>
 
       <SectionCard>
@@ -323,7 +328,7 @@ export function BomContent() {
                     <input
                       ref={searchInputRef}
                       value={query}
-                      onChange={(event) => setQuery(event.target.value)}
+                      onChange={(event) => updateQuery(event.target.value)}
                       placeholder="Search by reference, product, alternative..."
                       className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-12 pr-4 text-sm font-medium text-slate-800 outline-none transition focus:border-slate-300 focus:bg-white"
                     />
@@ -353,7 +358,7 @@ export function BomContent() {
                     <button
                       type="button"
                       onClick={() => {
-                        setQuery("");
+                        updateQuery("");
                         setStatus("All Status");
                         setSearchOpen(false);
                       }}
@@ -416,9 +421,11 @@ export function BomContent() {
                         </button>
                         {openMenuId === bom.id ? (
                           <div className="absolute right-0 z-20 mt-2 w-36 rounded-2xl border border-slate-200 bg-white p-2 shadow-[0_18px_40px_rgba(15,23,42,0.12)]">
-                            <button type="button" onClick={() => router.push("/bills-of-materials/new")} className="block w-full rounded-xl px-3 py-2 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50">
-                              Open
-                            </button>
+                            {canCreate ? (
+                              <button type="button" onClick={() => router.push("/bills-of-materials/new")} className="block w-full rounded-xl px-3 py-2 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                                Open
+                              </button>
+                            ) : null}
                             <button
                               type="button"
                               onClick={() => {
@@ -453,8 +460,13 @@ export function BomContent() {
                   <button
                     key={bom.id}
                     type="button"
-                    onClick={() => router.push("/bills-of-materials/new")}
-                    className="rounded-[20px] border border-slate-200 bg-white p-4 text-left shadow-[0_10px_24px_rgba(15,23,42,0.04)] transition hover:-translate-y-0.5 hover:shadow-[0_18px_38px_rgba(15,23,42,0.08)]"
+                    onClick={() => {
+                      if (canCreate) {
+                        router.push("/bills-of-materials/new");
+                      }
+                    }}
+                    disabled={!canCreate}
+                    className="rounded-[0.25rem] border border-slate-200 bg-white p-4 text-left shadow-[0_10px_24px_rgba(15,23,42,0.04)] transition hover:-translate-y-0.5 hover:shadow-[0_18px_38px_rgba(15,23,42,0.08)] disabled:cursor-default disabled:opacity-100"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>
@@ -571,10 +583,10 @@ export function BomCreateContent() {
     }));
   }
 
-  function submit() {
+  async function submit() {
     setSaving(true);
     try {
-      const next = createBom({ ...draft, reference: nextReference });
+      const next = await createBom({ ...draft, reference: nextReference });
       appendAuditLog({
         user: "Admin",
         module: "Bills of Materials",
@@ -596,13 +608,7 @@ export function BomCreateContent() {
     <div className="space-y-4">
       <section className="flex flex-wrap items-start justify-between gap-4 animate-fade-up">
         <div>
-          <div className="flex items-center gap-2 text-sm font-semibold text-slate-500">
-            <span>Home</span>
-            <span className="text-slate-300">/</span>
-            <span>Bills of Materials</span>
-            <span className="text-slate-300">/</span>
-            <span className="text-blue-600">Create</span>
-          </div>
+          <Breadcrumbs items={[{ label: "Home", href: "/dashboard" }, { label: "Bills of Materials", href: "/bills-of-materials" }, { label: "Create" }]} />
           <h1 className="mt-2 text-[1.65rem] font-extrabold tracking-[-0.04em] text-slate-900 sm:text-[1.9rem]">Bill of Materials - Create</h1>
         </div>
 
@@ -762,3 +768,4 @@ export function BomCreateContent() {
     </div>
   );
 }
+

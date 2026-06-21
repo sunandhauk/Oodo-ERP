@@ -2,24 +2,40 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 import { useAuditLog } from "@/components/audit-log-provider";
 import { ChevronDownIcon, SearchIcon } from "@/components/icons";
+import { useProducts } from "@/components/products-store";
 import { usePurchaseOrders } from "@/components/purchase-orders-store";
+import type { SessionUser } from "@/lib/auth-types";
 import type { PurchaseOrderDraft, PurchaseOrderLine, PurchaseOrderRecord, PurchaseOrderStatus } from "@/lib/purchase-orders";
-import { calculatePurchaseOrderTotal, getNextPurchaseOrderReference } from "@/lib/purchase-orders";
+import { getNextPurchaseOrderReference } from "@/lib/purchase-orders";
+import { buildListPath } from "@/lib/list-filters";
+
+type UserLookup = {
+  id: string;
+  login_id: string;
+  full_name: string;
+  email: string;
+  status: string;
+};
 
 function Badge({ status }: { status: PurchaseOrderStatus }) {
   const className =
     status === "Confirmed"
-      ? "bg-emerald-50 text-emerald-700"
-      : status === "Received"
+      ? "bg-sky-50 text-sky-700"
+      : status === "Partially Received"
         ? "bg-blue-50 text-blue-700"
-        : status === "Pending"
-          ? "bg-amber-50 text-amber-700"
+        : status === "Fully Received"
+          ? "bg-emerald-50 text-emerald-700"
           : status === "Cancelled"
             ? "bg-red-50 text-red-700"
-            : "bg-slate-100 text-slate-700";
+            : status === "Pending"
+              ? "bg-amber-50 text-amber-700"
+              : status === "Received"
+                ? "bg-emerald-50 text-emerald-700"
+                : "bg-slate-100 text-slate-700";
 
   return (
     <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm font-medium ${className}`}>
@@ -39,7 +55,7 @@ function SectionCard({
   className?: string;
 }) {
   return (
-    <section className={`rounded-[24px] border border-slate-200 bg-white shadow-[0_16px_38px_rgba(15,23,42,0.05)] ${className}`}>
+    <section className={`rounded-[0.25rem] border border-slate-200 bg-white shadow-[0_16px_38px_rgba(15,23,42,0.05)] ${className}`}>
       {title ? <div className="border-b border-slate-100 px-4 py-4 text-[0.98rem] font-extrabold tracking-[-0.03em] text-slate-900">{title}</div> : null}
       {children}
     </section>
@@ -63,6 +79,34 @@ function makeDefaultLine(): PurchaseOrderLine {
     units: "Nos",
     unitCost: 0,
   };
+}
+
+function isFinalPurchaseStatus(status: PurchaseOrderStatus) {
+  return status === "Fully Received" || status === "Cancelled";
+}
+
+function isReceivingPurchaseStatus(status: PurchaseOrderStatus) {
+  return status === "Confirmed" || status === "Partially Received";
+}
+
+function formatCreationDate(date: Date) {
+  return new Intl.DateTimeFormat("en-US", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(date);
+}
+
+function formatCreationTime(date: Date) {
+  return new Intl.DateTimeFormat("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function getLineTotal(line: PurchaseOrderLine, status: PurchaseOrderStatus) {
+  const quantity = isReceivingPurchaseStatus(status) || isFinalPurchaseStatus(status) ? line.receivedQuantity : line.orderedQuantity;
+  return quantity * line.unitCost;
 }
 
 function SearchToolbarIcon() {
@@ -101,18 +145,26 @@ function GridToolbarIcon() {
   );
 }
 
-export function PurchaseOrdersContent() {
+type PurchaseOrdersContentProps = {
+  isAdmin?: boolean;
+  canCreate?: boolean;
+};
+
+export function PurchaseOrdersContent({ isAdmin = false, canCreate = false }: PurchaseOrdersContentProps) {
+  void isAdmin;
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { appendAuditLog } = useAuditLog();
   const { orders } = usePurchaseOrders();
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"table" | "cards">("table");
-  const [query, setQuery] = useState("");
-  const [status, setStatus] = useState<string>("All Status");
   const [page, setPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(10);
+  const query = searchParams.get("q") ?? "";
+  const status = searchParams.get("status") ?? "All Status";
 
   useEffect(() => {
     if (searchOpen) {
@@ -166,6 +218,20 @@ export function PurchaseOrdersContent() {
       newValue: "cards",
       details: "Purchase orders switched to card view",
     });
+  }
+
+  function updateQuery(nextQuery: string) {
+    router.replace(buildListPath(pathname, searchParams, { q: nextQuery }), { scroll: false });
+  }
+
+  function updateStatus(nextStatus: string) {
+    router.replace(buildListPath(pathname, searchParams, { status: nextStatus }), { scroll: false });
+  }
+
+  function clearFilters() {
+    router.replace(buildListPath(pathname, searchParams, { q: "", status: "All Status" }), { scroll: false });
+    setSearchOpen(false);
+    setFilterOpen(false);
   }
 
   const filteredOrders = useMemo(() => {
@@ -227,24 +293,18 @@ export function PurchaseOrdersContent() {
   return (
     <div className="space-y-4">
       <section className="flex flex-wrap items-end justify-between gap-4 animate-fade-up">
-        <div>
-          <div className="flex items-center gap-2 text-sm font-semibold text-slate-500">
-            <span>Home</span>
-            <span className="text-slate-300">/</span>
-            <span className="text-blue-600">Purchase Orders</span>
-          </div>
-          <h1 className="mt-2 text-[1.65rem] font-extrabold tracking-[-0.04em] text-slate-900 sm:text-[1.9rem]">Purchase Order List</h1>
-          <p className="mt-1 text-[0.9rem] text-slate-500 sm:text-[0.95rem]">Browse, filter, and manage purchase orders.</p>
-        </div>
+        <Breadcrumbs items={[{ label: "Home", href: "/dashboard" }, { label: "Purchase Orders" }]} />
 
-        <button
-          type="button"
-          onClick={() => router.push("/purchase-orders/new")}
-          className="inline-flex items-center gap-2 rounded-2xl bg-brand-600 px-4 py-3 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(31,158,122,0.2)] transition hover:bg-brand-700"
-        >
-          <span className="text-lg leading-none">+</span>
-          New Purchase Order
-        </button>
+        {canCreate ? (
+          <button
+            type="button"
+            onClick={() => router.push("/purchase-orders/new")}
+            className="inline-flex items-center gap-2 rounded-2xl bg-brand-600 px-4 py-3 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(31,158,122,0.2)] transition hover:bg-brand-700"
+          >
+            <span className="text-lg leading-none">+</span>
+            New Purchase Order
+          </button>
+        ) : null}
       </section>
 
       <SectionCard>
@@ -337,7 +397,7 @@ export function PurchaseOrdersContent() {
                     <input
                       ref={searchInputRef}
                       value={query}
-                      onChange={(event) => setQuery(event.target.value)}
+                      onChange={(event) => updateQuery(event.target.value)}
                       placeholder="Search by reference, vendor, responsible..."
                       className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-12 pr-4 text-sm font-medium text-slate-800 outline-none transition focus:border-slate-300 focus:bg-white"
                     />
@@ -352,10 +412,10 @@ export function PurchaseOrdersContent() {
                     <div className="relative">
                       <select
                         value={status}
-                        onChange={(event) => setStatus(event.target.value)}
+                        onChange={(event) => updateStatus(event.target.value)}
                         className="h-12 w-full appearance-none rounded-2xl border border-slate-200 bg-slate-50 px-4 pr-10 text-sm font-medium text-slate-800 outline-none transition focus:border-slate-300 focus:bg-white"
                       >
-                        {["All Status", "Confirmed", "Draft", "Pending", "Received", "Cancelled"].map((value) => (
+                        {["All Status", "Draft", "Confirmed", "Partially Received", "Fully Received", "Cancelled", "Pending", "Received"].map((value) => (
                           <option key={value}>{value}</option>
                         ))}
                       </select>
@@ -367,9 +427,7 @@ export function PurchaseOrdersContent() {
                     <button
                       type="button"
                       onClick={() => {
-                        setQuery("");
-                        setStatus("All Status");
-                        setSearchOpen(false);
+                        clearFilters();
                       }}
                       className="flex h-12 w-full items-center justify-center rounded-2xl border border-slate-200 bg-white text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
                     >
@@ -448,7 +506,7 @@ export function PurchaseOrdersContent() {
                         details: `Opened ${order.reference} from card view`,
                       });
                     }}
-                    className="rounded-[20px] border border-slate-200 bg-white p-4 text-left shadow-[0_10px_24px_rgba(15,23,42,0.04)] transition hover:-translate-y-0.5 hover:shadow-[0_18px_38px_rgba(15,23,42,0.08)]"
+                    className="rounded-[0.25rem] border border-slate-200 bg-white p-4 text-left shadow-[0_10px_24px_rgba(15,23,42,0.04)] transition hover:-translate-y-0.5 hover:shadow-[0_18px_38px_rgba(15,23,42,0.08)]"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>
@@ -515,20 +573,105 @@ export function PurchaseOrdersContent() {
   );
 }
 
-export function PurchaseOrderCreateContent() {
+export function PurchaseOrderCreateContent({ user }: { user: SessionUser }) {
   const router = useRouter();
   const { appendAuditLog } = useAuditLog();
   const { orders, createOrder } = usePurchaseOrders();
+  const { products, isLoading: productsLoading } = useProducts();
+  const [creationTimestamp] = useState(() => new Date());
+  const [userOptions, setUserOptions] = useState<UserLookup[]>([]);
+  const [loadingLookups, setLoadingLookups] = useState(true);
   const nextReference = useMemo(() => getNextPurchaseOrderReference(orders), [orders]);
+  const assignedResponsible = user.displayName.trim() || user.fullName.trim() || user.loginId.trim();
+  const vendorOptions = useMemo(() => {
+    const values = new Set<string>([
+      "Masterfast Ltd",
+      "OMN Metals",
+      "Prime Components",
+      "Blue Edge Traders",
+      "Nova Industrial",
+      "Apex Supplies",
+      "Vector Materials",
+      "Sigma Logistics",
+      "Orbit Partners",
+      "Unity Resources",
+    ]);
+
+    for (const product of products) {
+      if (product.vendorName?.trim()) {
+        values.add(product.vendorName.trim());
+      }
+    }
+
+    for (const order of orders) {
+      if (order.vendor?.trim()) {
+        values.add(order.vendor.trim());
+      }
+    }
+
+    return Array.from(values).sort((left, right) => left.localeCompare(right));
+  }, [orders, products]);
+  const responsibleOptions = useMemo(
+    () => [
+      { id: user.sub, label: assignedResponsible, value: assignedResponsible },
+      ...userOptions
+        .filter((item) => item.status.toLowerCase() === "active")
+        .map((item) => ({
+          id: item.id,
+          label: item.full_name.trim() || item.login_id.trim(),
+          value: item.full_name.trim() || item.login_id.trim(),
+        })),
+    ].filter((item, index, array) => array.findIndex((candidate) => candidate.value === item.value) === index),
+    [assignedResponsible, user.sub, userOptions],
+  );
+  const selectableProducts = useMemo(
+    () => products.filter((product) => product.status !== "Archived"),
+    [products],
+  );
   const [draft, setDraft] = useState<PurchaseOrderDraft>({
     vendor: "",
-    responsible: "",
+    responsible: assignedResponsible,
     address: "",
-    date: new Date().toISOString().slice(0, 10),
+    date: creationTimestamp.toISOString().slice(0, 10),
     lines: [makeDefaultLine()],
     status: "Draft",
   });
   const [saving, setSaving] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    const controller = new AbortController();
+
+    async function loadLookupUsers() {
+      try {
+        const response = await fetch("/api/users/lookup", {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        const payload = (await response.json().catch(() => null)) as { status?: string; data?: UserLookup[]; error?: unknown } | null;
+
+        if (active && response.ok && payload?.status === "success" && Array.isArray(payload.data)) {
+          setUserOptions(payload.data);
+        }
+      } catch {
+        if (active) {
+          setUserOptions([]);
+        }
+      } finally {
+        if (active) {
+          setLoadingLookups(false);
+        }
+      }
+    }
+
+    void loadLookupUsers();
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, []);
 
   function updateLine(index: number, patch: Partial<PurchaseOrderLine>) {
     setDraft((current) => ({
@@ -548,11 +691,110 @@ export function PurchaseOrderCreateContent() {
     }));
   }
 
-  function submit(status: PurchaseOrderStatus) {
+  function applyProductSelection(index: number, productName: string) {
+    const selectedProduct = selectableProducts.find((product) => product.product === productName);
+
+    updateLine(index, {
+      product: selectedProduct?.product ?? productName,
+      unitCost: selectedProduct?.costPrice ?? 0,
+    });
+  }
+
+  function setPurchaseStatus(nextStatus: PurchaseOrderStatus) {
+    setDraft((current) => {
+      if (current.status === nextStatus) {
+        return current;
+      }
+
+      return {
+        ...current,
+        status: nextStatus,
+      };
+    });
+  }
+
+  function handleConfirm() {
+    setErrorMessage("");
+    setPurchaseStatus("Confirmed");
+    appendAuditLog({
+      user: user.displayName,
+      module: "Purchase Orders",
+      recordType: "Purchase Order",
+      recordId: nextReference,
+      action: "Updated",
+      fieldChanged: "Status",
+      oldValue: "Draft",
+      newValue: "Confirmed",
+      details: `Confirmed purchase order ${nextReference}`,
+    });
+  }
+
+  function handleReceive() {
+    setErrorMessage("");
+    const fullyReceived = draft.lines.every((line) => Number(line.receivedQuantity ?? 0) >= Number(line.orderedQuantity ?? 0));
+    const nextStatus: PurchaseOrderStatus = fullyReceived ? "Fully Received" : "Partially Received";
+
+    setDraft((current) => ({
+      ...current,
+      status: nextStatus,
+      lines: fullyReceived
+        ? current.lines.map((line) => ({
+            ...line,
+            receivedQuantity: line.orderedQuantity,
+          }))
+        : current.lines,
+    }));
+
+    appendAuditLog({
+      user: user.displayName,
+      module: "Purchase Orders",
+      recordType: "Purchase Order",
+      recordId: nextReference,
+      action: "Updated",
+      fieldChanged: "Status",
+      oldValue: draft.status,
+      newValue: nextStatus,
+      details: `Marked purchase order ${nextReference} as ${nextStatus}`,
+    });
+  }
+
+  function handleCancel() {
+    setErrorMessage("");
+    setPurchaseStatus("Cancelled");
+    appendAuditLog({
+      user: user.displayName,
+      module: "Purchase Orders",
+      recordType: "Purchase Order",
+      recordId: nextReference,
+      action: "Updated",
+      fieldChanged: "Status",
+      oldValue: draft.status,
+      newValue: "Cancelled",
+      details: `Cancelled purchase order ${nextReference}`,
+    });
+  }
+
+  async function submit(status: PurchaseOrderStatus) {
+    const validationMessage = !draft.vendor.trim()
+      ? "Please select a vendor."
+      : !draft.responsible.trim()
+        ? "Please select a responsible person."
+        : !draft.address.trim()
+          ? "Please enter a vendor address."
+          : draft.lines.some((line) => !line.product.trim())
+            ? "Please select a product for every line."
+            : "";
+
+    if (validationMessage) {
+      setErrorMessage(validationMessage);
+      return;
+    }
+
     setSaving(true);
+    setErrorMessage("");
 
     try {
-      const nextOrder = createOrder({ ...draft, status });
+      const nextOrder = await createOrder({ ...draft, status });
       appendAuditLog({
         user: "Admin",
         module: "Purchase Orders",
@@ -570,52 +812,79 @@ export function PurchaseOrderCreateContent() {
     }
   }
 
-  const grandTotal = calculatePurchaseOrderTotal(draft.lines);
+  const isDraft = draft.status === "Draft";
+  const isReceiving = isReceivingPurchaseStatus(draft.status);
+  const isFinalized = isFinalPurchaseStatus(draft.status);
+  const grandTotal = draft.lines.reduce((sum, line) => sum + getLineTotal(line, draft.status), 0);
+  const creationDateLabel = formatCreationDate(creationTimestamp);
+  const creationTimeLabel = formatCreationTime(creationTimestamp);
 
   return (
     <div className="space-y-4">
       <section className="flex flex-wrap items-start justify-between gap-4 animate-fade-up">
         <div>
-          <div className="flex items-center gap-2 text-sm font-semibold text-slate-500">
-            <span>Purchase Orders</span>
-            <span className="text-slate-300">/</span>
-            <span className="text-blue-600">Create</span>
-          </div>
+          <Breadcrumbs items={[{ label: "Home", href: "/dashboard" }, { label: "Purchase Orders", href: "/purchase-orders" }, { label: "Create" }]} />
           <h1 className="mt-2 text-[1.65rem] font-extrabold tracking-[-0.04em] text-slate-900 sm:text-[1.9rem]">Purchase Order - Create</h1>
+          <p className="mt-1 text-sm text-slate-500">Draft a purchase order, confirm it, and track receipts from the same screen.</p>
         </div>
 
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => router.push("/purchase-orders")}
-            className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            className="rounded-[0.25rem] border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
           >
             Cancel
           </button>
+          {draft.status === "Draft" ? (
+            <button
+              type="button"
+              onClick={handleConfirm}
+              className="rounded-[0.25rem] border border-sky-200 bg-sky-50 px-4 py-2.5 text-sm font-semibold text-sky-700 transition hover:bg-sky-100"
+            >
+              Confirm
+            </button>
+          ) : null}
+          {isReceiving ? (
+            <button
+              type="button"
+              onClick={handleReceive}
+              className="rounded-[0.25rem] border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100"
+            >
+              Receive
+            </button>
+          ) : null}
+          {!isFinalized ? (
+            <button
+              type="button"
+              onClick={handleCancel}
+              className="rounded-[0.25rem] border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-semibold text-rose-700 transition hover:bg-rose-100"
+            >
+              Cancel PO
+            </button>
+          ) : null}
           <button
             type="button"
             disabled={saving}
-            onClick={() => submit("Draft")}
-            className="rounded-xl border border-blue-200 bg-white px-4 py-2.5 text-sm font-semibold text-blue-700 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-70"
+            onClick={() => submit(draft.status)}
+            className="rounded-[0.25rem] bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-70"
           >
-            {saving ? "Saving..." : "Save as Draft"}
-          </button>
-          <button
-            type="button"
-            disabled={saving}
-            onClick={() => submit("Confirmed")}
-            className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-70"
-          >
-            Save & Confirm
+            {saving ? "Saving..." : "Save Purchase Order"}
           </button>
         </div>
       </section>
+
+      {errorMessage ? (
+        <div className="rounded-[0.25rem] border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">
+          {errorMessage}
+        </div>
+      ) : null}
 
       <section className="grid gap-4 xl:grid-cols-[1fr_240px]">
         <SectionCard className="overflow-hidden">
           <div className="flex items-center justify-between border-b border-slate-100 px-4 py-4">
             <div className="text-[0.98rem] font-extrabold tracking-[-0.03em] text-slate-900">Purchase Order Details</div>
-            <div className="rounded-full bg-blue-50 px-3 py-1 text-sm font-semibold text-blue-700">Status: Draft</div>
+            <div className="rounded-full bg-blue-50 px-3 py-1 text-sm font-semibold text-blue-700">Status: {draft.status}</div>
           </div>
 
           <div className="grid gap-4 p-4 md:grid-cols-2">
@@ -625,39 +894,54 @@ export function PurchaseOrderCreateContent() {
             </div>
             <div className="space-y-2">
               <label className="block text-sm font-semibold text-slate-600">Creation Date</label>
-              <input
-                type="date"
-                value={draft.date}
-                onChange={(event) => setDraft((current) => ({ ...current, date: event.target.value }))}
-                className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 outline-none"
-              />
+              <input value={creationDateLabel} readOnly className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-100 px-4 text-sm font-semibold text-slate-900 outline-none" />
             </div>
             <div className="space-y-2">
-              <label className="block text-sm font-semibold text-slate-600">Vendor</label>
-              <input
+              <label className="block text-sm font-semibold text-slate-600">Creation Time</label>
+              <input value={creationTimeLabel} readOnly className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-100 px-4 text-sm font-semibold text-slate-900 outline-none" />
+            </div>
+            <div className="space-y-2">
+              <label className="block text-sm font-semibold text-slate-600">Vendor *</label>
+              <select
                 value={draft.vendor}
                 onChange={(event) => setDraft((current) => ({ ...current, vendor: event.target.value }))}
-                placeholder="Select vendor"
-                className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 outline-none"
-              />
+                disabled={!isDraft}
+                className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 outline-none disabled:cursor-not-allowed disabled:bg-slate-100"
+              >
+                <option value="">{vendorOptions.length > 0 ? "Select vendor" : "No vendors available"}</option>
+                {vendorOptions.map((vendor) => (
+                  <option key={vendor} value={vendor}>
+                    {vendor}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="space-y-2">
-              <label className="block text-sm font-semibold text-slate-600">Responsible Person</label>
-              <input
+              <label className="block text-sm font-semibold text-slate-600">Responsible Person *</label>
+              <select
                 value={draft.responsible}
                 onChange={(event) => setDraft((current) => ({ ...current, responsible: event.target.value }))}
-                placeholder="Select responsible person"
-                className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 outline-none"
-              />
+                disabled={!isDraft}
+                className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 outline-none disabled:cursor-not-allowed disabled:bg-slate-100"
+              >
+                {responsibleOptions.map((option) => (
+                  <option key={option.id} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+                {loadingLookups && responsibleOptions.length === 1 ? <option value="">Loading users...</option> : null}
+              </select>
             </div>
             <div className="space-y-2 md:col-span-2">
               <label className="block text-sm font-semibold text-slate-600">Vendor Address</label>
               <textarea
                 value={draft.address}
                 onChange={(event) => setDraft((current) => ({ ...current, address: event.target.value }))}
+                maxLength={255}
                 placeholder="Enter vendor address"
                 rows={3}
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900 outline-none"
+                readOnly={!isDraft}
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900 outline-none read-only:bg-slate-100"
               />
             </div>
           </div>
@@ -689,7 +973,7 @@ export function PurchaseOrderCreateContent() {
           <table className="min-w-[1080px] w-full border-separate border-spacing-0">
             <thead className="bg-slate-50/80">
               <tr className="text-left text-[0.78rem] font-bold uppercase tracking-[0.14em] text-slate-500">
-                {["#", "Products", "Ordered Quantity", "Received Quantity", "Units", "Cost Unit Price", "Total", ""].map((column) => (
+                {["#", "Products", "Ordered Quantity", "Received Quantity", "Units", "Cost Price", "Total", ""].map((column) => (
                   <th key={column} className="border-b border-slate-200 px-4 py-3.5">
                     {column}
                   </th>
@@ -698,17 +982,24 @@ export function PurchaseOrderCreateContent() {
             </thead>
             <tbody>
               {draft.lines.map((line, index) => {
-                const lineTotal = line.orderedQuantity * line.unitCost;
+                const lineTotal = getLineTotal(line, draft.status);
                 return (
                   <tr key={index} className={index % 2 === 0 ? "bg-white" : "bg-slate-50/40"}>
                     <td className="border-b border-slate-100 px-4 py-4 text-sm font-semibold text-slate-700">{index + 1}</td>
                     <td className="border-b border-slate-100 px-4 py-4">
-                      <input
+                      <select
                         value={line.product}
-                        onChange={(event) => updateLine(index, { product: event.target.value })}
-                        placeholder="Product name"
-                        className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 outline-none"
-                      />
+                        onChange={(event) => applyProductSelection(index, event.target.value)}
+                        disabled={!isDraft || (productsLoading && selectableProducts.length === 0)}
+                        className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 outline-none disabled:cursor-not-allowed disabled:opacity-70"
+                      >
+                        <option value="">{productsLoading ? "Loading products..." : "Select product"}</option>
+                        {selectableProducts.map((product) => (
+                          <option key={product.id} value={product.product}>
+                            {product.product} - Rs. {product.costPrice.toLocaleString("en-IN")}
+                          </option>
+                        ))}
+                      </select>
                     </td>
                     <td className="border-b border-slate-100 px-4 py-4">
                       <input
@@ -716,7 +1007,8 @@ export function PurchaseOrderCreateContent() {
                         min="0"
                         value={line.orderedQuantity}
                         onChange={(event) => updateLine(index, { orderedQuantity: Number(event.target.value) })}
-                        className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 outline-none"
+                        readOnly={!isDraft}
+                        className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 outline-none read-only:bg-slate-100"
                       />
                     </td>
                     <td className="border-b border-slate-100 px-4 py-4">
@@ -725,14 +1017,16 @@ export function PurchaseOrderCreateContent() {
                         min="0"
                         value={line.receivedQuantity}
                         onChange={(event) => updateLine(index, { receivedQuantity: Number(event.target.value) })}
-                        className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 outline-none"
+                        readOnly={!isReceiving}
+                        className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 outline-none read-only:bg-slate-100"
                       />
                     </td>
                     <td className="border-b border-slate-100 px-4 py-4">
                       <input
                         value={line.units}
                         onChange={(event) => updateLine(index, { units: event.target.value })}
-                        className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 outline-none"
+                        readOnly={!isDraft}
+                        className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 outline-none read-only:bg-slate-100"
                       />
                     </td>
                     <td className="border-b border-slate-100 px-4 py-4">
@@ -741,7 +1035,8 @@ export function PurchaseOrderCreateContent() {
                         min="0"
                         value={line.unitCost}
                         onChange={(event) => updateLine(index, { unitCost: Number(event.target.value) })}
-                        className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 outline-none"
+                        readOnly={!isDraft}
+                        className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 outline-none read-only:bg-slate-100"
                       />
                     </td>
                     <td className="border-b border-slate-100 px-4 py-4 text-sm font-semibold text-slate-900">Rs. {lineTotal.toLocaleString("en-IN")}</td>
@@ -749,7 +1044,7 @@ export function PurchaseOrderCreateContent() {
                       <button
                         type="button"
                         onClick={() => removeLine(index)}
-                        disabled={draft.lines.length === 1}
+                        disabled={draft.lines.length === 1 || !isDraft}
                         className="rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         Remove
@@ -766,7 +1061,8 @@ export function PurchaseOrderCreateContent() {
           <button
             type="button"
             onClick={addLine}
-            className="rounded-xl border border-blue-200 bg-white px-4 py-2.5 text-sm font-semibold text-blue-700 transition hover:bg-blue-50"
+            disabled={!isDraft}
+            className="rounded-[0.25rem] border border-blue-200 bg-white px-4 py-2.5 text-sm font-semibold text-blue-700 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
             + Add a product
           </button>
@@ -778,3 +1074,4 @@ export function PurchaseOrderCreateContent() {
     </div>
   );
 }
+

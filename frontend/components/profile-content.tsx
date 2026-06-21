@@ -3,13 +3,13 @@
 import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 import { useAuditLog } from "@/components/audit-log-provider";
 import { CalendarIcon, ChevronDownIcon, DashboardIcon, EyeToggleIcon, LockIcon, MailIcon, UserIcon } from "@/components/icons";
 import { useEditableProfile } from "@/components/profile-store";
 import type { SessionUser } from "@/lib/auth-types";
 import type { EditableProfile } from "@/lib/profile";
 import { createDefaultProfile, normalizeEditableProfile, saveProfilePassword, validateEditableProfile } from "@/lib/profile";
-import { validatePassword } from "@/lib/validators";
 
 type EditableField = keyof EditableProfile | "avatarDataUrl";
 type FieldTouched = Partial<Record<EditableField, boolean>>;
@@ -31,6 +31,24 @@ function summaryInputClass(hasError: boolean, editable: boolean) {
   ]
     .filter(Boolean)
     .join(" ");
+}
+
+function validateProfilePassword(password: string) {
+  const trimmed = password.trim();
+
+  if (!trimmed) {
+    return "Password is required.";
+  }
+
+  if (trimmed.length < 9) {
+    return "Password must be at least 9 characters.";
+  }
+
+  if (!/[a-z]/.test(trimmed) || !/[A-Z]/.test(trimmed) || !/[^A-Za-z0-9]/.test(trimmed)) {
+    return "Password must include lowercase, uppercase, and a special character.";
+  }
+
+  return "";
 }
 
 function ProfileBadge({ profile }: { profile: EditableProfile }) {
@@ -110,7 +128,7 @@ export function ProfileContent({ user }: { user: SessionUser }) {
 
   const validationErrors = useMemo(() => validateEditableProfile(draft), [draft]);
   const formIsValid = Object.keys(validationErrors).length === 0 && !avatarError;
-  const passwordError = useMemo(() => validatePassword(passwordValue), [passwordValue]);
+  const passwordError = useMemo(() => validateProfilePassword(passwordValue), [passwordValue]);
 
   function updateField<K extends keyof EditableProfile>(key: K, value: EditableProfile[K]) {
     setDraft((current) => ({ ...current, [key]: value }));
@@ -286,15 +304,7 @@ export function ProfileContent({ user }: { user: SessionUser }) {
   return (
     <form className="space-y-4" onSubmit={handleSubmit}>
       <section className="flex flex-wrap items-end justify-between gap-4 animate-fade-up">
-        <div>
-          <div className="flex items-center gap-2 text-sm font-semibold text-slate-500">
-            <span>Home</span>
-            <span className="text-slate-300">/</span>
-            <span className="text-brand-600">My Profile</span>
-          </div>
-          <h1 className="mt-2 text-[1.65rem] font-extrabold tracking-[-0.04em] text-slate-900 sm:text-[1.9rem]">My Profile</h1>
-          <p className="mt-1 text-[0.9rem] text-slate-500 sm:text-[0.95rem]">Edit your account details, profile picture, and access information.</p>
-        </div>
+        <Breadcrumbs items={[{ label: "Home", href: "/dashboard" }, { label: "My Profile" }]} />
 
         <div className="flex flex-wrap items-center gap-2">
           <button
@@ -325,7 +335,7 @@ export function ProfileContent({ user }: { user: SessionUser }) {
       </section>
 
       <section className="grid gap-4 lg:grid-cols-[1.45fr_0.95fr]">
-        <article className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-[0_16px_38px_rgba(15,23,42,0.05)] animate-fade-up" style={{ animationDelay: "60ms" }}>
+        <article className="rounded-[0.25rem] border border-slate-200 bg-white p-5 shadow-[0_16px_38px_rgba(15,23,42,0.05)] animate-fade-up" style={{ animationDelay: "60ms" }}>
           <div className="flex flex-col gap-5 md:flex-row md:items-center">
             <div className="relative flex w-fit items-center justify-center">
               <div className="h-44 w-44 overflow-hidden rounded-full shadow-[0_14px_35px_rgba(31,158,122,0.12)] ring-1 ring-brand-100">
@@ -389,7 +399,7 @@ export function ProfileContent({ user }: { user: SessionUser }) {
                   aria-invalid={Boolean((touched.role || submitAttempted) && validationErrors.role)}
                   className={summaryInputClass(Boolean((touched.role || submitAttempted) && validationErrors.role), isEditing)}
                 />
-                <span>•</span>
+                <span>|</span>
                 <input
                   value={draft.department}
                   onChange={(event) => updateField("department", event.target.value)}
@@ -465,7 +475,7 @@ export function ProfileContent({ user }: { user: SessionUser }) {
           {avatarError ? <p className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">{avatarError}</p> : null}
         </article>
 
-        <article className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-[0_16px_38px_rgba(15,23,42,0.05)] animate-fade-up" style={{ animationDelay: "100ms" }}>
+        <article className="rounded-[0.25rem] border border-slate-200 bg-white p-5 shadow-[0_16px_38px_rgba(15,23,42,0.05)] animate-fade-up" style={{ animationDelay: "100ms" }}>
           <h2 className="text-[1.05rem] font-extrabold tracking-[-0.03em] text-slate-900">Quick Actions</h2>
           <div className="mt-4 divide-y divide-slate-100">
             <button
@@ -543,59 +553,7 @@ export function ProfileContent({ user }: { user: SessionUser }) {
           </div>
         </article>
       </section>
-
-<<<<<<< HEAD
-      <section className="grid gap-4 lg:grid-cols-2">
-        <article className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-[0_16px_38px_rgba(15,23,42,0.05)] animate-fade-up" style={{ animationDelay: "140ms" }}>
-          <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#eff6ff] text-blue-600">
-              <UserIcon className="h-5 w-5" />
-            </div>
-            <h2 className="text-[1.05rem] font-extrabold tracking-[-0.03em] text-slate-900">Editable Profile Information</h2>
-          </div>
-          <div className="mt-2">
-            <SectionRow label="Full Name" value={draft.displayName} editable onChange={(value) => updateField("displayName", value)} placeholder="Enter full name" />
-            <SectionRow label="Login ID" value={draft.loginId} editable onChange={(value) => updateField("loginId", value)} placeholder="Enter login ID" />
-            <SectionRow label="Email" value={draft.email} editable type="email" onChange={(value) => updateField("email", value)} placeholder="Enter email" />
-            <SectionRow label="Phone" value={draft.phone} editable onChange={(value) => updateField("phone", value)} placeholder="Enter phone number" />
-            <SectionRow label="Department" value={draft.department} editable onChange={(value) => updateField("department", value)} placeholder="Enter department" />
-            <SectionRow label="Location" value={draft.location} editable onChange={(value) => updateField("location", value)} placeholder="Enter location" />
-            <SectionRow label="Employee ID" value={draft.employeeId} editable onChange={(value) => updateField("employeeId", value)} placeholder="Employee ID" />
-            <SectionRow label="Status" value={draft.status} editable onChange={(value) => updateField("status", value as EditableProfile["status"])} placeholder="Active" />
-          </div>
-          <div className="mt-4">
-            <label className="mb-2 block text-[0.92rem] text-slate-500">Bio</label>
-            <textarea
-              value={draft.bio}
-              onChange={(event) => updateField("bio", event.target.value)}
-              rows={4}
-              className="w-full rounded-[18px] border border-slate-200 bg-slate-50 px-4 py-3 text-[0.92rem] font-medium text-slate-900 outline-none transition focus:border-slate-300 focus:bg-white"
-            />
-          </div>
-        </article>
-
-        <article className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-[0_16px_38px_rgba(15,23,42,0.05)] animate-fade-up" style={{ animationDelay: "180ms" }}>
-          <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
-              <ShieldIcon className="h-5 w-5" />
-            </div>
-            <h2 className="text-[1.05rem] font-extrabold tracking-[-0.03em] text-slate-900">Security Information</h2>
-          </div>
-          <div className="mt-2">
-            <SectionRow label="Password" value="••••••••••••" />
-            <SectionRow label="Session Roles" value={user.roles.length > 0 ? user.roles.join(", ") : "viewer"} />
-            <SectionRow label="Account Status" value={user.status} />
-            <SectionRow label="Joined On" value={joinedOn} />
-            <SectionRow label="Avatar" value={draft.avatarDataUrl ? "Uploaded" : "Default"} />
-            <SectionRow label="Changes" value="Editable and saved locally" />
-          </div>
-          <div className="mt-4 rounded-[20px] border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-600">
-            Profile changes are stored locally for this browser and immediately reflected in the dashboard header.
-          </div>
-        </article>
-      </section>
-=======
->>>>>>> frontend
     </form>
   );
 }
+

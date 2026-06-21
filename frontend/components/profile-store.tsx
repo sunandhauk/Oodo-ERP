@@ -8,11 +8,11 @@ import { PROFILE_UPDATED_EVENT } from "@/lib/profile";
 
 export function useEditableProfile(user: SessionUser) {
   const defaultProfile = useMemo(() => createDefaultProfile(user), [user]);
-  const [profile, setProfile] = useState<EditableProfile>(() => loadProfile(user));
+  const [profile, setProfile] = useState<EditableProfile>(defaultProfile);
 
   useEffect(() => {
     setProfile(loadProfile(user));
-  }, [user]);
+  }, [defaultProfile, user]);
 
   useEffect(() => {
     const handleUpdate = () => {

@@ -12,7 +12,7 @@ export default async function BomsPage() {
 
   return (
     <DashboardShell user={session}>
-      <BomContent />
+      <BomContent canCreate={session.permissions.includes("manufacturing.create")} />
     </DashboardShell>
   );
 }

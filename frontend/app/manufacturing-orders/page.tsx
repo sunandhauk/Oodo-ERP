@@ -12,7 +12,7 @@ export default async function ManufacturingOrdersPage() {
 
   return (
     <DashboardShell user={session}>
-      <ManufacturingOrdersContent />
+      <ManufacturingOrdersContent isAdmin={session.roles.includes("admin")} canCreate={session.permissions.includes("manufacturing.create")} />
     </DashboardShell>
   );
 }

@@ -10,9 +10,13 @@ export default async function ManufacturingOrderCreatePage() {
     redirect("/login");
   }
 
+  if (!session.permissions.includes("manufacturing.create")) {
+    redirect("/manufacturing-orders");
+  }
+
   return (
     <DashboardShell user={session}>
-      <ManufacturingOrderCreateContent />
+      <ManufacturingOrderCreateContent user={session} />
     </DashboardShell>
   );
 }

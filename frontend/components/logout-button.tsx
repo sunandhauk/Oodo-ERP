@@ -7,7 +7,7 @@ import { authClient } from "@/lib/auth-client";
 import { useAuditLog } from "@/components/audit-log-provider";
 import { UserIcon } from "@/components/icons";
 
-export function LogoutButton({ user }: { user: SessionUser }) {
+export function LogoutButton({ user, compact = false }: { user: SessionUser; compact?: boolean }) {
   const router = useRouter();
   const { appendAuditLog } = useAuditLog();
   const [loading, setLoading] = useState(false);
@@ -40,12 +40,17 @@ export function LogoutButton({ user }: { user: SessionUser }) {
       type="button"
       onClick={handleLogout}
       disabled={loading}
-      className="inline-flex items-center gap-3 rounded-full border border-brand-200 bg-brand-50 px-5 py-3 text-sm font-semibold text-brand-700 transition hover:bg-brand-100 disabled:cursor-not-allowed disabled:opacity-60"
+      aria-label={loading ? "Signing out..." : "Sign out"}
+      title={loading ? "Signing out..." : "Sign out"}
+      className={[
+        "inline-flex w-full items-center rounded-[0.25rem] border border-brand-200 bg-brand-50 py-3 text-sm font-semibold text-brand-700 transition hover:bg-brand-100 disabled:cursor-not-allowed disabled:opacity-60",
+        compact ? "justify-center px-3" : "gap-3 px-5",
+      ].join(" ")}
     >
-      <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white/80 text-brand-700">
+      <span className="flex h-9 w-9 items-center justify-center rounded-[0.25rem] bg-white/80 text-brand-700">
         <UserIcon className="h-5 w-5" />
       </span>
-      {loading ? "Signing out..." : "Sign out"}
+      {compact ? null : loading ? "Signing out..." : "Sign out"}
     </button>
   );
 }

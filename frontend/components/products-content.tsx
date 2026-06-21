@@ -2,13 +2,13 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 import { useAuditLog } from "@/components/audit-log-provider";
 import { ChevronDownIcon, SearchIcon } from "@/components/icons";
 import { useProducts } from "@/components/products-store";
-import type { ProductDraft, ProductRecord, ProductStatus } from "@/lib/products";
-import { getNextProductReference } from "@/lib/products";
-
+import type { ProductRecord, ProductStatus } from "@/lib/products";
+import { buildSearchPath } from "@/lib/search-params";
 function Badge({ status }: { status: ProductStatus }) {
   const className =
     status === "Active"
@@ -26,7 +26,7 @@ function Badge({ status }: { status: ProductStatus }) {
 }
 
 function SectionCard({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <section className={`rounded-[24px] border border-slate-200 bg-white shadow-[0_16px_38px_rgba(15,23,42,0.05)] ${className}`}>{children}</section>;
+  return <section className={`rounded-[0.25rem] border border-slate-200 bg-white shadow-[0_16px_38px_rgba(15,23,42,0.05)] ${className}`}>{children}</section>;
 }
 
 function SearchToolbarIcon() {
@@ -69,19 +69,26 @@ function formatCurrency(value: number) {
   return `₹ ${value.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-export function ProductsContent() {
+type ProductsContentProps = {
+  initialProducts?: ProductRecord[];
+  canCreate?: boolean;
+};
+
+export function ProductsContent({ initialProducts = [], canCreate = false }: ProductsContentProps) {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { appendAuditLog } = useAuditLog();
-  const { products, replaceProducts } = useProducts();
+  const { products, replaceProducts, createProduct } = useProducts();
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"table" | "cards">("table");
-  const [query, setQuery] = useState("");
   const [status, setStatus] = useState<string>("All Status");
   const [page, setPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const query = searchParams.get("q") ?? "";
 
   useEffect(() => {
     if (searchOpen) {
@@ -102,6 +109,12 @@ export function ProductsContent() {
       details: "Products list opened",
     });
   }, [appendAuditLog]);
+
+  useEffect(() => {
+    if (initialProducts.length > 0) {
+      replaceProducts(initialProducts);
+    }
+  }, [initialProducts, replaceProducts]);
 
   useEffect(() => {
     setPage(1);
@@ -179,35 +192,49 @@ export function ProductsContent() {
     URL.revokeObjectURL(url);
   }
 
-  function removeProduct(reference: string) {
-    const next = products.filter((product) => product.reference !== reference);
-    replaceProducts(next);
+  async function removeProduct(product: ProductRecord) {
+    const response = await fetch(`/api/products/${product.id}`, { method: "DELETE" });
+    const payload = (await response.json().catch(() => null)) as { status?: string; error?: { message?: string } | string } | null;
+    if (!response.ok || payload?.status !== "success") {
+      throw new Error(typeof payload?.error === "string" ? payload.error : payload?.error?.message || "Unable to delete product.");
+    }
+
+    replaceProducts(products.filter((item) => item.id !== product.id));
     setOpenMenuId(null);
     appendAuditLog({
       user: "Admin",
       module: "Products",
       recordType: "Product",
-      recordId: reference,
+      recordId: product.reference,
       action: "Deleted",
       fieldChanged: "Row action",
-      oldValue: reference,
+      oldValue: product.reference,
       newValue: "-",
-      details: `Deleted product ${reference}`,
+      details: `Deleted product ${product.reference}`,
     });
   }
 
-  function duplicateProduct(product: ProductRecord) {
-    const nextReference = getNextProductReference(products);
-    const next = [
-      {
-        ...product,
-        id: `product-${Date.now()}`,
-        reference: nextReference,
-        product: `${product.product} Copy`,
-      },
-      ...products,
-    ];
-    replaceProducts(next);
+  function updateQuery(nextQuery: string) {
+    router.replace(buildSearchPath(pathname, searchParams, nextQuery), { scroll: false });
+  }
+
+  async function duplicateProduct(product: ProductRecord) {
+    const next = await createProduct({
+      product: `${product.product} Copy`,
+      salesPrice: product.salesPrice,
+      costPrice: product.costPrice,
+      onHandQty: product.onHandQty,
+      category: product.category,
+      description: product.description,
+      status: product.status,
+      imageUrl: product.imageUrl,
+      procureOnDemand: product.procureOnDemand,
+      procureSource: product.procureSource,
+      minimumQty: product.minimumQty,
+      freeToUseQty: product.freeToUseQty,
+      vendorName: product.vendorName,
+      bomReference: product.bomReference,
+    });
     setOpenMenuId(null);
     appendAuditLog({
       user: "Admin",
@@ -217,31 +244,26 @@ export function ProductsContent() {
       action: "Created",
       fieldChanged: "Duplicate",
       oldValue: product.reference,
-      newValue: nextReference,
-      details: `Duplicated product ${product.reference} as ${nextReference}`,
+      newValue: next.reference,
+      details: `Duplicated product ${product.reference} as ${next.reference}`,
     });
   }
 
   return (
     <div className="space-y-4">
       <section className="flex flex-wrap items-end justify-between gap-4 animate-fade-up">
-        <div>
-          <div className="flex items-center gap-2 text-sm font-semibold text-slate-500">
-            <span>Home</span>
-            <span className="text-slate-300">/</span>
-            <span className="text-blue-600">Products</span>
-          </div>
-          <h1 className="mt-2 text-[1.65rem] font-extrabold tracking-[-0.04em] text-slate-900 sm:text-[1.9rem]">Products</h1>
-        </div>
+        <Breadcrumbs items={[{ label: "Home", href: "/dashboard" }, { label: "Products" }]} />
 
-        <button
-          type="button"
-          onClick={() => router.push("/products/new")}
-          className="inline-flex items-center gap-2 rounded-2xl bg-brand-600 px-4 py-3 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(31,158,122,0.2)] transition hover:bg-brand-700"
-        >
-          <span className="text-lg leading-none">+</span>
-          New
-        </button>
+        {canCreate ? (
+          <button
+            type="button"
+            onClick={() => router.push("/products/new")}
+            className="inline-flex items-center gap-2 rounded-2xl bg-brand-600 px-4 py-3 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(31,158,122,0.2)] transition hover:bg-brand-700"
+          >
+            <span className="text-lg leading-none">+</span>
+            New
+          </button>
+        ) : null}
       </section>
 
       <SectionCard>
@@ -322,7 +344,7 @@ export function ProductsContent() {
                     <input
                       ref={searchInputRef}
                       value={query}
-                      onChange={(event) => setQuery(event.target.value)}
+                      onChange={(event) => updateQuery(event.target.value)}
                       placeholder="Search by reference, product, category..."
                       className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-12 pr-4 text-sm font-medium text-slate-800 outline-none transition focus:border-slate-300 focus:bg-white"
                     />
@@ -352,7 +374,7 @@ export function ProductsContent() {
                     <button
                       type="button"
                       onClick={() => {
-                        setQuery("");
+                        updateQuery("");
                         setStatus("All Status");
                         setSearchOpen(false);
                       }}
@@ -372,7 +394,7 @@ export function ProductsContent() {
             <table className="min-w-[1120px] w-full border-separate border-spacing-0">
               <thead className="bg-slate-50/80">
                 <tr className="text-left text-[0.78rem] font-bold uppercase tracking-[0.14em] text-slate-500">
-                  {["", "Reference", "Product", "Sales Price", "Cost Price", "On Hand Qty", ""].map((column, index) => (
+                {["", "Image", "Reference", "Product", "Sales Price", "Cost Price", "On Hand Qty", ""].map((column, index) => (
                     <th key={`${column}-${index}`} className="border-b border-slate-200 px-4 py-3.5">
                       {column}
                     </th>
@@ -384,6 +406,15 @@ export function ProductsContent() {
                   <tr key={product.id} className={index % 2 === 0 ? "bg-white" : "bg-slate-50/40"}>
                     <td className="border-b border-slate-100 px-4 py-4">
                       <input type="checkbox" className="h-4 w-4 rounded border-slate-300 text-blue-600" />
+                    </td>
+                    <td className="border-b border-slate-100 px-4 py-4">
+                      <div className="h-12 w-12 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
+                        {product.imageUrl ? (
+                          <img src={product.imageUrl} alt={product.product} className="h-full w-full object-cover" />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center text-[0.7rem] font-semibold text-slate-400">No img</div>
+                        )}
+                      </div>
                     </td>
                     <td className="border-b border-slate-100 px-4 py-4 text-sm font-semibold text-slate-900">{product.reference}</td>
                     <td className="border-b border-slate-100 px-4 py-4 text-sm text-slate-700">{product.product}</td>
@@ -406,15 +437,17 @@ export function ProductsContent() {
                         </button>
                         {openMenuId === product.id ? (
                           <div className="absolute right-0 z-20 mt-2 w-36 rounded-2xl border border-slate-200 bg-white p-2 shadow-[0_18px_40px_rgba(15,23,42,0.12)]">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                duplicateProduct(product);
-                              }}
-                              className="block w-full rounded-xl px-3 py-2 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50"
-                            >
-                              Duplicate
-                            </button>
+                            {canCreate ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  void duplicateProduct(product);
+                                }}
+                                className="block w-full rounded-xl px-3 py-2 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                              >
+                                Duplicate
+                              </button>
+                            ) : null}
                             <button
                               type="button"
                               onClick={() => {
@@ -427,7 +460,9 @@ export function ProductsContent() {
                             </button>
                             <button
                               type="button"
-                              onClick={() => removeProduct(product.reference)}
+                              onClick={() => {
+                                void removeProduct(product);
+                              }}
                               className="block w-full rounded-xl px-3 py-2 text-left text-sm font-semibold text-rose-600 hover:bg-rose-50"
                             >
                               Delete
@@ -447,9 +482,23 @@ export function ProductsContent() {
                   <button
                     key={product.id}
                     type="button"
-                    onClick={() => router.push("/products/new")}
-                    className="rounded-[20px] border border-slate-200 bg-white p-4 text-left shadow-[0_10px_24px_rgba(15,23,42,0.04)] transition hover:-translate-y-0.5 hover:shadow-[0_18px_38px_rgba(15,23,42,0.08)]"
+                    onClick={() => {
+                      if (canCreate) {
+                        router.push("/products/new");
+                      }
+                    }}
+                    disabled={!canCreate}
+                    className="rounded-[0.25rem] border border-slate-200 bg-white p-4 text-left shadow-[0_10px_24px_rgba(15,23,42,0.04)] transition hover:-translate-y-0.5 hover:shadow-[0_18px_38px_rgba(15,23,42,0.08)] disabled:cursor-default disabled:opacity-100"
                   >
+                    <div className="mb-4 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
+                      <div className="relative h-40 w-full">
+                        {product.imageUrl ? (
+                          <img src={product.imageUrl} alt={product.product} className="h-full w-full object-cover" />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center text-sm font-semibold text-slate-400">No image</div>
+                        )}
+                      </div>
+                    </div>
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <div className="text-[1.05rem] font-extrabold tracking-[-0.04em] text-blue-700">{product.reference}</div>
@@ -501,113 +550,3 @@ export function ProductsContent() {
   );
 }
 
-export function ProductCreateContent() {
-  const router = useRouter();
-  const { appendAuditLog } = useAuditLog();
-  const { products, createProduct } = useProducts();
-  const nextReference = useMemo(() => {
-    const highest = products.reduce((max, product) => {
-      const numeric = Number(product.reference.replace(/[^\d]/g, ""));
-      return Number.isFinite(numeric) ? Math.max(max, numeric) : max;
-    }, 0);
-    return `PRD-${String(highest + 1).padStart(6, "0")}`;
-  }, [products]);
-  const [saving, setSaving] = useState(false);
-  const [draft, setDraft] = useState<ProductDraft>({
-    product: "",
-    salesPrice: 0,
-    costPrice: 0,
-    onHandQty: 0,
-    category: "",
-    description: "",
-    status: "Draft",
-  });
-
-  function submit() {
-    setSaving(true);
-    try {
-      const next = createProduct(draft);
-      appendAuditLog({
-        user: "Admin",
-        module: "Products",
-        recordType: "Product",
-        recordId: next.reference,
-        action: "Created",
-        fieldChanged: "Order",
-        oldValue: "Draft",
-        newValue: next.status,
-        details: `Created product ${next.reference}`,
-      });
-      router.replace("/products");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div className="space-y-4">
-      <section className="flex flex-wrap items-start justify-between gap-4 animate-fade-up">
-        <div>
-          <div className="flex items-center gap-2 text-sm font-semibold text-slate-500">
-            <span>Home</span>
-            <span className="text-slate-300">/</span>
-            <span>Products</span>
-            <span className="text-slate-300">/</span>
-            <span className="text-blue-600">Create</span>
-          </div>
-          <h1 className="mt-2 text-[1.65rem] font-extrabold tracking-[-0.04em] text-slate-900 sm:text-[1.9rem]">Product - Create</h1>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <button type="button" onClick={() => router.push("/audit-logs")} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
-            Logs
-          </button>
-          <button type="button" onClick={() => router.push("/products")} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">
-            Cancel
-          </button>
-          <button type="button" disabled={saving} onClick={submit} className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-70">
-            Save
-          </button>
-        </div>
-      </section>
-
-      <SectionCard>
-        <div className="flex items-center justify-between border-b border-slate-100 px-4 py-4">
-          <div className="text-[0.98rem] font-extrabold tracking-[-0.03em] text-slate-900">Product Details</div>
-          <div className="rounded-full bg-blue-50 px-3 py-1 text-sm font-semibold text-blue-700">Auto Generate</div>
-        </div>
-
-        <div className="grid gap-4 p-4 md:grid-cols-2">
-          <div className="space-y-2">
-            <label className="block text-sm font-semibold text-slate-600">Reference</label>
-            <input value={nextReference} readOnly className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 outline-none" />
-          </div>
-          <div className="space-y-2">
-            <label className="block text-sm font-semibold text-slate-600">Product</label>
-            <input value={draft.product} onChange={(event) => setDraft((current) => ({ ...current, product: event.target.value }))} placeholder="Enter product name" className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 outline-none" />
-          </div>
-          <div className="space-y-2">
-            <label className="block text-sm font-semibold text-slate-600">Sales Price</label>
-            <input type="number" min="0" value={draft.salesPrice} onChange={(event) => setDraft((current) => ({ ...current, salesPrice: Number(event.target.value) }))} className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 outline-none" />
-          </div>
-          <div className="space-y-2">
-            <label className="block text-sm font-semibold text-slate-600">Cost Price</label>
-            <input type="number" min="0" value={draft.costPrice} onChange={(event) => setDraft((current) => ({ ...current, costPrice: Number(event.target.value) }))} className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 outline-none" />
-          </div>
-          <div className="space-y-2">
-            <label className="block text-sm font-semibold text-slate-600">On Hand Qty</label>
-            <input type="number" min="0" value={draft.onHandQty} onChange={(event) => setDraft((current) => ({ ...current, onHandQty: Number(event.target.value) }))} className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 outline-none" />
-          </div>
-          <div className="space-y-2">
-            <label className="block text-sm font-semibold text-slate-600">Category</label>
-            <input value={draft.category} onChange={(event) => setDraft((current) => ({ ...current, category: event.target.value }))} placeholder="Enter category" className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-900 outline-none" />
-          </div>
-          <div className="space-y-2 md:col-span-2">
-            <label className="block text-sm font-semibold text-slate-600">Description</label>
-            <textarea value={draft.description} onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))} rows={3} placeholder="Enter product description" className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900 outline-none" />
-          </div>
-        </div>
-      </SectionCard>
-    </div>
-  );
-}

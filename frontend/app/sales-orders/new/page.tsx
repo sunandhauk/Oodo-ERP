@@ -10,9 +10,13 @@ export default async function SalesOrderCreatePage() {
     redirect("/login");
   }
 
+  if (!session.permissions.includes("sales.create")) {
+    redirect("/sales-orders");
+  }
+
   return (
     <DashboardShell user={session}>
-      <SalesOrderCreateContent />
+      <SalesOrderCreateContent user={session} />
     </DashboardShell>
   );
 }

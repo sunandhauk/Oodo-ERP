@@ -134,33 +134,12 @@ function createStorageKey() {
 }
 
 export function loadBoms(): BomRecord[] {
-  if (typeof window === "undefined") {
-    return createSampleBoms();
-  }
-
-  try {
-    const raw = window.localStorage.getItem(createStorageKey());
-    if (!raw) {
-      return createSampleBoms();
-    }
-
-    const parsed = JSON.parse(raw) as BomRecord[];
-    if (!Array.isArray(parsed) || parsed.length === 0) {
-      return createSampleBoms();
-    }
-
-    return parsed;
-  } catch {
-    return createSampleBoms();
-  }
+  void createStorageKey;
+  return [];
 }
 
 export function saveBoms(boms: BomRecord[]) {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  window.localStorage.setItem(createStorageKey(), JSON.stringify(boms));
+  void boms;
 }
 
 export function getNextBomReference(boms: BomRecord[]) {

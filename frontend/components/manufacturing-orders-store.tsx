@@ -1,36 +1,61 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { createManufacturingOrderRecord, loadManufacturingOrders, saveManufacturingOrders } from "@/lib/manufacturing-orders";
 import type { ManufacturingComponentLine, ManufacturingOrderDraft, ManufacturingOrderRecord, ManufacturingWorkOrderLine } from "@/lib/manufacturing-orders";
 
 export function useManufacturingOrders() {
-  const [orders, setOrders] = useState<ManufacturingOrderRecord[]>(() => loadManufacturingOrders());
+  const [orders, setOrders] = useState<ManufacturingOrderRecord[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const loadOrders = useCallback(async () => {
+    const response = await fetch("/api/manufacturing-orders", { cache: "no-store" });
+    const payload = (await response.json().catch(() => null)) as { status?: string; data?: ManufacturingOrderRecord[]; error?: unknown } | null;
+    if (response.ok && payload?.status === "success" && Array.isArray(payload.data)) {
+      setOrders(payload.data);
+    }
+  }, []);
 
   useEffect(() => {
-    setOrders(loadManufacturingOrders());
+    let active = true;
+
+    async function bootstrap() {
+      try {
+        await loadOrders();
+      } finally {
+        if (active) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    void bootstrap();
+
+    return () => {
+      active = false;
+    };
+  }, [loadOrders]);
+
+  const createOrder = useCallback(async (draft: ManufacturingOrderDraft) => {
+    const response = await fetch("/api/manufacturing-orders", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(draft),
+    });
+    const payload = (await response.json().catch(() => null)) as { status?: string; data?: ManufacturingOrderRecord; error?: { message?: string } | string } | null;
+    const created = payload?.data;
+    if (!response.ok || payload?.status !== "success" || !created) {
+      throw new Error(typeof payload?.error === "string" ? payload.error : payload?.error?.message || "Unable to create manufacturing order.");
+    }
+
+    setOrders((current) => [created, ...current]);
+    return created;
   }, []);
 
-  const persist = useCallback((next: ManufacturingOrderRecord[]) => {
+  const replaceOrders = useCallback((next: ManufacturingOrderRecord[]) => {
     setOrders(next);
-    saveManufacturingOrders(next);
   }, []);
-
-  const createOrder = useCallback(
-    (draft: ManufacturingOrderDraft) => {
-      const next = [createManufacturingOrderRecord(draft, orders), ...orders];
-      persist(next);
-      return next[0];
-    },
-    [orders, persist],
-  );
-
-  const replaceOrders = useCallback(
-    (next: ManufacturingOrderRecord[]) => {
-      persist(next);
-    },
-    [persist],
-  );
 
   const seedComponentLine = useCallback(
     (): ManufacturingComponentLine => ({
@@ -48,6 +73,7 @@ export function useManufacturingOrders() {
       operation: "",
       assignee: "",
       plannedHours: 1,
+      realHours: 0,
       status: "Pending",
     }),
     [],
@@ -55,8 +81,10 @@ export function useManufacturingOrders() {
 
   return {
     orders,
+    isLoading,
     createOrder,
     replaceOrders,
+    refreshOrders: loadOrders,
     seedComponentLine,
     seedWorkOrderLine,
   };

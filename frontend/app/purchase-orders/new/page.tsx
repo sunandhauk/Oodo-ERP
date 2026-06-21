@@ -10,9 +10,13 @@ export default async function PurchaseOrderCreatePage() {
     redirect("/login");
   }
 
+  if (!session.permissions.includes("purchase.create")) {
+    redirect("/purchase-orders");
+  }
+
   return (
     <DashboardShell user={session}>
-      <PurchaseOrderCreateContent />
+      <PurchaseOrderCreateContent user={session} />
     </DashboardShell>
   );
 }

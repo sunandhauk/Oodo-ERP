@@ -14,6 +14,7 @@ export type ManufacturingWorkOrderLine = {
   operation: string;
   assignee: string;
   plannedHours: number;
+  realHours: number;
   status: "Pending" | "Ready" | "In Progress" | "Done";
 };
 
@@ -138,6 +139,7 @@ function buildWorkOrderLine(index: number): ManufacturingWorkOrderLine {
     operation: ["Cutting", "Assembly", "Testing", "Packing"][index % 4],
     assignee: sampleAssignees[index % sampleAssignees.length],
     plannedHours: [2, 3, 1.5, 2.5][index % 4],
+    realHours: 0,
     status: ["Pending", "Ready", "In Progress", "Done"][index % 4] as ManufacturingWorkOrderLine["status"],
   };
 }
@@ -173,33 +175,12 @@ function createStorageKey() {
 }
 
 export function loadManufacturingOrders(): ManufacturingOrderRecord[] {
-  if (typeof window === "undefined") {
-    return createSampleManufacturingOrders();
-  }
-
-  try {
-    const raw = window.localStorage.getItem(createStorageKey());
-    if (!raw) {
-      return createSampleManufacturingOrders();
-    }
-
-    const parsed = JSON.parse(raw) as ManufacturingOrderRecord[];
-    if (!Array.isArray(parsed) || parsed.length === 0) {
-      return createSampleManufacturingOrders();
-    }
-
-    return parsed;
-  } catch {
-    return createSampleManufacturingOrders();
-  }
+  void createStorageKey;
+  return [];
 }
 
 export function saveManufacturingOrders(orders: ManufacturingOrderRecord[]) {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  window.localStorage.setItem(createStorageKey(), JSON.stringify(orders));
+  void orders;
 }
 
 export function getNextManufacturingOrderReference(orders: ManufacturingOrderRecord[]) {
@@ -246,7 +227,7 @@ export function createManufacturingOrderRecord(draft: ManufacturingOrderDraft, e
     }).format(new Date(`${draft.scheduleDate}T12:00:00`)),
     billOfMaterial: draft.billOfMaterial.trim(),
     components: components.map((component) => ({ ...component })),
-    workOrders: workOrders.map((workOrder) => ({ ...workOrder })),
+    workOrders: workOrders.map((workOrder) => ({ ...workOrder, realHours: workOrder.realHours ?? 0 })),
     totalCost: calculateManufacturingOrderTotal(components),
   };
 }

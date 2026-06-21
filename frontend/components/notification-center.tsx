@@ -196,7 +196,7 @@ export function NotificationCenter({ actorName }: { actorName: string }) {
         ref={triggerRef}
         type="button"
         onClick={() => setOpen((current) => !current)}
-        className="relative flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-[0_10px_24px_rgba(15,23,42,0.06)] transition duration-200 hover:border-slate-300 hover:bg-slate-50 active:scale-[0.98]"
+        className="relative flex h-11 w-11 items-center justify-center rounded-[0.25rem] border border-slate-200 bg-white text-slate-600 shadow-[0_10px_24px_rgba(15,23,42,0.06)] transition duration-200 hover:border-slate-300 hover:bg-slate-50 active:scale-[0.98]"
         aria-label={`Notifications ${notifications.length > 0 ? `(${notifications.length} new)` : ""}`}
         aria-expanded={open}
       >
@@ -218,7 +218,7 @@ export function NotificationCenter({ actorName }: { actorName: string }) {
               />
               <div
                 ref={menuRef}
-                className="fixed z-[9999] w-[min(92vw,420px)] overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-[0_30px_70px_rgba(15,23,42,0.22)]"
+                className="fixed z-[9999] w-[min(92vw,420px)] overflow-hidden rounded-[0.25rem] border border-slate-200 bg-white shadow-[0_30px_70px_rgba(15,23,42,0.22)]"
                 style={{
                   top: menuPosition.top,
                   right: menuPosition.right,
@@ -232,7 +232,7 @@ export function NotificationCenter({ actorName }: { actorName: string }) {
             <button
               type="button"
               onClick={() => router.push("/audit-logs")}
-              className="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+              className="rounded-[0.25rem] border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
             >
               View Logs
             </button>
@@ -270,7 +270,7 @@ export function NotificationCenter({ actorName }: { actorName: string }) {
                           <button
                             type="button"
                             onClick={() => markCompleted(entry)}
-                            className="inline-flex items-center gap-1.5 rounded-full bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-700"
+                            className="inline-flex items-center gap-1.5 rounded-[0.25rem] bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-700"
                           >
                             <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                               <path d="m20 6-11 11-5-5" />
@@ -301,3 +301,4 @@ export function NotificationCenter({ actorName }: { actorName: string }) {
     </div>
   );
 }
+

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { AuditLogProvider } from "@/components/audit-log-provider";
+import { ProductsProvider } from "@/components/products-store";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -16,7 +17,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <AuditLogProvider>{children}</AuditLogProvider>
+        <AuditLogProvider>
+          <ProductsProvider>{children}</ProductsProvider>
+        </AuditLogProvider>
       </body>
     </html>
   );

@@ -4,7 +4,7 @@ export function BrandMark({ className = "" }: { className?: string }) {
   return (
     <div className={`relative ${className}`} aria-hidden="true">
       <Image
-        src="/erp-logo-fixed.png"
+        src="/logo_icon.png"
         alt=""
         fill
         priority
